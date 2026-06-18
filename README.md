@@ -47,6 +47,12 @@ python demo2.py
 python demo3.py
 ```
 
+非法数值冲突回归测试（验证 invalid_copies/invalid_borrow_days/invalid_retain_hours 返回 conflicts 明细而非 400 错误）：
+
+```bash
+python demo4.py
+```
+
 ## 数据文件位置
 
 所有持久化数据以 UTF-8 JSON 格式存储在项目目录下的 `data/` 文件夹，服务重启后完整恢复。
@@ -290,7 +296,9 @@ curl -X POST http://127.0.0.1:5000/api/collection/import?dry_run=false \
 | `duplicate_in_import` | 导入文件内部存在重复的 `book_id` | 409 |
 | `duplicate_book_id` | 要导入的 `book_id` 在系统中已存在 | 409 |
 | `has_active_reservations` | 书目已有活跃预约（等待/待取/借阅中），不能覆盖 | 409 |
-| `invalid_copies` | `total_copies` 非法（≤0） | 400 |
+| `invalid_copies` | `total_copies` 非法（≤0） | 409 |
+| `invalid_borrow_days` | `borrow_days` 非法（≤0） | 409 |
+| `invalid_retain_hours` | `retain_hours` 非法（<0） | 409 |
 | `race_condition` | 导入过程中并发创建了相同 `book_id` | 409 |
 | `import_error` | 导入过程中发生异常，已全部回滚 | 409 |
 

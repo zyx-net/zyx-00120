@@ -1,45 +1,12 @@
 [
   {
-    "reservation_id": "79201955-a1c3-4b60-85b3-95cca513cb16",
-    "book_id": "IMPORT-B001",
-    "reader_id": "R-TEST-01",
+    "reservation_id": "ee3ef6eb-e022-45f4-bf98-08aef4529946",
+    "book_id": "BASE-B001",
+    "reader_id": "R-TEST-001",
     "status": "available",
-    "created_at": "2026-06-18T18:50:30.477267+00:00",
-    "available_at": "2026-06-18T18:50:30.477267+00:00",
-    "expire_at": "2026-06-19T18:50:30.477267+00:00",
-    "borrowed_at": null,
-    "returned_at": null
-  },
-  {
-    "reservation_id": "4988e115-1a27-4237-97c0-d30edacb475e",
-    "book_id": "IMPORT-B001",
-    "reader_id": "R-TEST-02",
-    "status": "available",
-    "created_at": "2026-06-18T18:50:30.481252+00:00",
-    "available_at": "2026-06-18T18:50:30.481252+00:00",
-    "expire_at": "2026-06-19T18:50:30.481252+00:00",
-    "borrowed_at": null,
-    "returned_at": null
-  },
-  {
-    "reservation_id": "bfab0de7-42df-4d62-830f-2b5f5a5e9716",
-    "book_id": "IMPORT-B002",
-    "reader_id": "R-TEST-01",
-    "status": "available",
-    "created_at": "2026-06-18T18:50:30.485504+00:00",
-    "available_at": "2026-06-18T18:50:30.485504+00:00",
-    "expire_at": "2026-06-19T06:50:30.485504+00:00",
-    "borrowed_at": null,
-    "returned_at": null
-  },
-  {
-    "reservation_id": "81a88f52-31b2-4bf1-814c-e90e6f2464f4",
-    "book_id": "REVIEW-ZYX-01",
-    "reader_id": "REVIEW-READER-01",
-    "status": "available",
-    "created_at": "2026-06-18T18:53:53.206925+00:00",
-    "available_at": "2026-06-18T18:53:53.206925+00:00",
-    "expire_at": "2026-06-18T22:53:53.206925+00:00",
+    "created_at": "2026-06-18T19:20:22.489912+00:00",
+    "available_at": "2026-06-18T19:20:22.489912+00:00",
+    "expire_at": "2026-06-19T19:20:22.489912+00:00",
     "borrowed_at": null,
     "returned_at": null
   }

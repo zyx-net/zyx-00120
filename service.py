@@ -451,16 +451,16 @@ def _validate_book_config(book_data, idx):
             errors.append(f"第 {idx} 条记录 title 必须是非空字符串")
 
     if "total_copies" in book_data:
-        if not isinstance(book_data["total_copies"], int) or book_data["total_copies"] <= 0:
-            errors.append(f"第 {idx} 条记录 total_copies 必须是正整数，实际: {book_data['total_copies']}")
+        if not isinstance(book_data["total_copies"], int):
+            errors.append(f"第 {idx} 条记录 total_copies 必须是整数，实际类型: {type(book_data['total_copies']).__name__}")
 
     if "borrow_days" in book_data:
-        if not isinstance(book_data["borrow_days"], int) or book_data["borrow_days"] <= 0:
-            errors.append(f"第 {idx} 条记录 borrow_days 必须是正整数，实际: {book_data['borrow_days']}")
+        if not isinstance(book_data["borrow_days"], int):
+            errors.append(f"第 {idx} 条记录 borrow_days 必须是整数，实际类型: {type(book_data['borrow_days']).__name__}")
 
     if "retain_hours" in book_data:
-        if not isinstance(book_data["retain_hours"], int) or book_data["retain_hours"] < 0:
-            errors.append(f"第 {idx} 条记录 retain_hours 必须是非负整数，实际: {book_data['retain_hours']}")
+        if not isinstance(book_data["retain_hours"], int):
+            errors.append(f"第 {idx} 条记录 retain_hours 必须是整数，实际类型: {type(book_data['retain_hours']).__name__}")
 
     return errors
 
@@ -528,7 +528,23 @@ def import_collection(import_data, dry_run=False):
                 "type": "invalid_copies",
                 "book_id": book_id,
                 "index": idx,
-                "message": f"书目 {book_id} 的 total_copies 非法: {book_data['total_copies']}",
+                "message": f"书目 {book_id} 的 total_copies 非法: {book_data['total_copies']}，必须为正整数",
+            })
+
+        if book_data["borrow_days"] <= 0:
+            conflicts.append({
+                "type": "invalid_borrow_days",
+                "book_id": book_id,
+                "index": idx,
+                "message": f"书目 {book_id} 的 borrow_days 非法: {book_data['borrow_days']}，必须为正整数",
+            })
+
+        if book_data["retain_hours"] < 0:
+            conflicts.append({
+                "type": "invalid_retain_hours",
+                "book_id": book_id,
+                "index": idx,
+                "message": f"书目 {book_id} 的 retain_hours 非法: {book_data['retain_hours']}，必须为非负整数",
             })
 
     if validation_errors:

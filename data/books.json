@@ -1,58 +1,37 @@
 [
   {
-    "book_id": "IMPORT-B001",
-    "title": "Python编程从入门到实践",
+    "book_id": "BASE-B001",
+    "title": "基线书目1",
     "total_copies": 5,
     "borrow_days": 30,
     "retain_hours": 24
   },
   {
-    "book_id": "IMPORT-B002",
-    "title": "深入理解计算机系统",
+    "book_id": "BASE-B002",
+    "title": "基线书目2",
     "total_copies": 3,
     "borrow_days": 14,
     "retain_hours": 12
   },
   {
-    "book_id": "IMPORT-B003",
-    "title": "设计模式：可复用面向对象软件的基础",
+    "book_id": "BASE-B003",
+    "title": "基线书目3",
     "total_copies": 2,
     "borrow_days": 21,
     "retain_hours": 6
   },
   {
-    "book_id": "DUP-TEST-01",
-    "title": "已存在无预约的书",
-    "total_copies": 2,
-    "borrow_days": 7,
-    "retain_hours": 1
+    "book_id": "RVW-PERSIST-01",
+    "title": "Reviewer Persist One",
+    "total_copies": 4,
+    "borrow_days": 21,
+    "retain_hours": 12
   },
   {
-    "book_id": "IMPORT-B004",
-    "title": "测试新书1",
-    "total_copies": 3,
-    "borrow_days": 7,
-    "retain_hours": 2
-  },
-  {
-    "book_id": "IMPORT-B005",
-    "title": "测试新书2",
-    "total_copies": 5,
-    "borrow_days": 30,
-    "retain_hours": 24
-  },
-  {
-    "book_id": "REVIEW-ZYX-01",
-    "title": "Reviewer Import 1",
-    "total_copies": 2,
-    "borrow_days": 14,
-    "retain_hours": 4
-  },
-  {
-    "book_id": "REVIEW-ZYX-02",
-    "title": "Reviewer Import 2",
+    "book_id": "RVW-PERSIST-02",
+    "title": "Reviewer Persist Two",
     "total_copies": 1,
     "borrow_days": 7,
-    "retain_hours": 2
+    "retain_hours": 1
   }
 ]

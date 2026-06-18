@@ -1,52 +1,34 @@
 [
   {
-    "log_id": "efffc55f-9fcc-4da6-8339-fa877e752d3c",
-    "timestamp": "2026-06-18T18:50:30.448820+00:00",
-    "action": "export_collection",
-    "reader_id": null,
-    "book_id": null,
-    "detail": "导出馆藏共 0 本书",
-    "success": true
-  },
-  {
-    "log_id": "92c243cc-b968-4945-830b-996690c97350",
-    "timestamp": "2026-06-18T18:50:30.452809+00:00",
-    "action": "import_collection_dry_run",
-    "reader_id": null,
-    "book_id": null,
-    "detail": "DRY-RUN 校验通过，可导入 3 本书",
-    "success": true
-  },
-  {
-    "log_id": "93a5126b-2bac-4bfc-b33f-d9dd329c8379",
-    "timestamp": "2026-06-18T18:50:30.460743+00:00",
+    "log_id": "1b245bee-3326-4d9b-af3d-0fd5a23197b1",
+    "timestamp": "2026-06-18T19:20:22.435199+00:00",
     "action": "import_book",
     "reader_id": null,
-    "book_id": "IMPORT-B001",
-    "detail": "批量导入书目: Python编程从入门到实践",
+    "book_id": "BASE-B001",
+    "detail": "批量导入书目: 基线书目1",
     "success": true
   },
   {
-    "log_id": "9dfe3c75-75cf-463a-a2df-73ab1ecd0c71",
-    "timestamp": "2026-06-18T18:50:30.461959+00:00",
+    "log_id": "d8cff571-a028-4aea-bca3-02928c116aa1",
+    "timestamp": "2026-06-18T19:20:22.436796+00:00",
     "action": "import_book",
     "reader_id": null,
-    "book_id": "IMPORT-B002",
-    "detail": "批量导入书目: 深入理解计算机系统",
+    "book_id": "BASE-B002",
+    "detail": "批量导入书目: 基线书目2",
     "success": true
   },
   {
-    "log_id": "62f73aae-1e8b-4ae9-85c7-022c42d4d4c1",
-    "timestamp": "2026-06-18T18:50:30.463050+00:00",
+    "log_id": "96dfa998-5c2f-4e7c-a2f6-90bf3c295e15",
+    "timestamp": "2026-06-18T19:20:22.438144+00:00",
     "action": "import_book",
     "reader_id": null,
-    "book_id": "IMPORT-B003",
-    "detail": "批量导入书目: 设计模式：可复用面向对象软件的基础",
+    "book_id": "BASE-B003",
+    "detail": "批量导入书目: 基线书目3",
     "success": true
   },
   {
-    "log_id": "c048144d-84d8-4316-8015-d62171ae1339",
-    "timestamp": "2026-06-18T18:50:30.463659+00:00",
+    "log_id": "7cb4dd3f-2538-4848-92db-4fb891d82200",
+    "timestamp": "2026-06-18T19:20:22.438983+00:00",
     "action": "import_collection",
     "reader_id": null,
     "book_id": null,
@@ -54,192 +36,102 @@
     "success": true
   },
   {
-    "log_id": "2e3d241e-183f-4746-8413-36aa79b83f6f",
-    "timestamp": "2026-06-18T18:50:30.478101+00:00",
-    "action": "reserve",
-    "reader_id": "R-TEST-01",
-    "book_id": "IMPORT-B001",
-    "detail": "预约成功，状态=available",
-    "success": true
-  },
-  {
-    "log_id": "4ab3db6c-a32a-4d50-aea2-365d2cb66238",
-    "timestamp": "2026-06-18T18:50:30.482350+00:00",
-    "action": "reserve",
-    "reader_id": "R-TEST-02",
-    "book_id": "IMPORT-B001",
-    "detail": "预约成功，状态=available",
-    "success": true
-  },
-  {
-    "log_id": "31811210-edd2-4a3b-92a0-16e7dd8f7582",
-    "timestamp": "2026-06-18T18:50:30.486606+00:00",
-    "action": "reserve",
-    "reader_id": "R-TEST-01",
-    "book_id": "IMPORT-B002",
-    "detail": "预约成功，状态=available",
-    "success": true
-  },
-  {
-    "log_id": "83e8f10f-44d7-4e52-9531-1ba6cdc5c748",
-    "timestamp": "2026-06-18T18:50:30.493261+00:00",
-    "action": "export_collection",
-    "reader_id": null,
-    "book_id": null,
-    "detail": "导出馆藏共 3 本书",
-    "success": true
-  },
-  {
-    "log_id": "2740975e-f668-4775-9734-1dc2135f16b9",
-    "timestamp": "2026-06-18T18:50:30.496743+00:00",
-    "action": "add_book",
-    "reader_id": null,
-    "book_id": "DUP-TEST-01",
-    "detail": "添加书目 已存在无预约的书",
-    "success": true
-  },
-  {
-    "log_id": "b9679e2d-85a9-4f55-9b65-a0c165212e43",
-    "timestamp": "2026-06-18T18:50:30.499981+00:00",
-    "action": "import_collection",
-    "reader_id": null,
-    "book_id": null,
-    "detail": "导入发现 1 个冲突，已回滚",
-    "success": false
-  },
-  {
-    "log_id": "49145521-8301-485c-8aa7-35ec14cbd743",
-    "timestamp": "2026-06-18T18:50:30.509439+00:00",
-    "action": "import_collection",
-    "reader_id": null,
-    "book_id": null,
-    "detail": "导入发现 1 个冲突，已回滚",
-    "success": false
-  },
-  {
-    "log_id": "8241cad1-b4d6-4a6f-80e8-c6fc0fb95d6a",
-    "timestamp": "2026-06-18T18:50:30.512575+00:00",
-    "action": "import_collection",
-    "reader_id": null,
-    "book_id": null,
-    "detail": "导入发现 1 个冲突，已回滚",
-    "success": false
-  },
-  {
-    "log_id": "58f44773-d7ed-427e-9d5e-60bfa6d908c3",
-    "timestamp": "2026-06-18T18:50:32.044739+00:00",
-    "action": "export_collection",
-    "reader_id": null,
-    "book_id": null,
-    "detail": "导出馆藏共 4 本书",
-    "success": true
-  },
-  {
-    "log_id": "82b5c55f-2060-415c-ae1d-c4cd5bb5a2bd",
-    "timestamp": "2026-06-18T18:50:32.061524+00:00",
-    "action": "export_collection",
-    "reader_id": null,
-    "book_id": null,
-    "detail": "导出馆藏共 4 本书",
-    "success": true
-  },
-  {
-    "log_id": "f11119ad-5b00-4a9c-8121-bf147a508e31",
-    "timestamp": "2026-06-18T18:50:32.169728+00:00",
-    "action": "export_collection",
-    "reader_id": null,
-    "book_id": null,
-    "detail": "导出馆藏共 4 本书",
-    "success": true
-  },
-  {
-    "log_id": "eae206f9-ada2-4178-ba18-efa771330c6d",
-    "timestamp": "2026-06-18T18:50:32.173584+00:00",
+    "log_id": "18a06bd2-b62a-4350-8483-8aace37c989b",
+    "timestamp": "2026-06-18T19:20:22.454555+00:00",
     "action": "import_collection_dry_run",
     "reader_id": null,
     "book_id": null,
-    "detail": "DRY-RUN 校验通过，可导入 2 本书",
+    "detail": "DRY-RUN 发现 4 个冲突",
+    "success": false
+  },
+  {
+    "log_id": "39301700-596c-477f-821e-c1462f72959a",
+    "timestamp": "2026-06-18T19:20:22.478153+00:00",
+    "action": "import_collection",
+    "reader_id": null,
+    "book_id": null,
+    "detail": "导入发现 4 个冲突，已回滚",
+    "success": false
+  },
+  {
+    "log_id": "1927271d-0139-42ea-826e-30d2e3158f2e",
+    "timestamp": "2026-06-18T19:20:22.490765+00:00",
+    "action": "reserve",
+    "reader_id": "R-TEST-001",
+    "book_id": "BASE-B001",
+    "detail": "预约成功，状态=available",
     "success": true
   },
   {
-    "log_id": "88431190-8c3b-4a75-abdf-309b1919745b",
-    "timestamp": "2026-06-18T18:50:32.177840+00:00",
+    "log_id": "98637eed-a984-4273-abaf-b696275d80aa",
+    "timestamp": "2026-06-18T19:20:22.493873+00:00",
+    "action": "import_collection",
+    "reader_id": null,
+    "book_id": null,
+    "detail": "导入发现 1 个冲突，已回滚",
+    "success": false
+  },
+  {
+    "log_id": "05d110d7-f994-40db-a4fd-c8f75161cdab",
+    "timestamp": "2026-06-18T19:20:22.496956+00:00",
+    "action": "import_collection",
+    "reader_id": null,
+    "book_id": null,
+    "detail": "导入发现 1 个冲突，已回滚",
+    "success": false
+  },
+  {
+    "log_id": "1d2c9c49-a571-430f-a38b-06da291d95aa",
+    "timestamp": "2026-06-18T19:20:24.038765+00:00",
+    "action": "import_collection_dry_run",
+    "reader_id": null,
+    "book_id": null,
+    "detail": "DRY-RUN 发现 4 个冲突",
+    "success": false
+  },
+  {
+    "log_id": "e63b8d97-16af-499d-bab5-5ff1b8e628c8",
+    "timestamp": "2026-06-18T19:21:10.023856+00:00",
+    "action": "import_collection_dry_run",
+    "reader_id": null,
+    "book_id": null,
+    "detail": "DRY-RUN 校验通过，可导入 1 本书",
+    "success": true
+  },
+  {
+    "log_id": "b83c7acc-50f4-4615-8ee8-0eafb80b61c6",
+    "timestamp": "2026-06-18T19:21:10.050982+00:00",
+    "action": "import_collection",
+    "reader_id": null,
+    "book_id": null,
+    "detail": "导入发现 1 个冲突，已回滚",
+    "success": false
+  },
+  {
+    "log_id": "de924421-76ae-4371-9139-1b9820ac32bb",
+    "timestamp": "2026-06-18T19:21:10.070825+00:00",
     "action": "import_book",
     "reader_id": null,
-    "book_id": "IMPORT-B004",
-    "detail": "批量导入书目: 测试新书1",
+    "book_id": "RVW-PERSIST-01",
+    "detail": "批量导入书目: Reviewer Persist One",
     "success": true
   },
   {
-    "log_id": "1633d422-7873-4a52-b182-4256d1f4f7ea",
-    "timestamp": "2026-06-18T18:50:32.179284+00:00",
+    "log_id": "1cf6ffb7-a2fe-4e18-850c-97c1ddf8cb76",
+    "timestamp": "2026-06-18T19:21:10.072329+00:00",
     "action": "import_book",
     "reader_id": null,
-    "book_id": "IMPORT-B005",
-    "detail": "批量导入书目: 测试新书2",
+    "book_id": "RVW-PERSIST-02",
+    "detail": "批量导入书目: Reviewer Persist Two",
     "success": true
   },
   {
-    "log_id": "21a5fac7-f883-4e40-a558-5e37d09f6914",
-    "timestamp": "2026-06-18T18:50:32.180156+00:00",
+    "log_id": "862060bc-47f5-4246-865b-42452242a1e3",
+    "timestamp": "2026-06-18T19:21:10.073146+00:00",
     "action": "import_collection",
     "reader_id": null,
     "book_id": null,
     "detail": "成功批量导入 2 本书",
-    "success": true
-  },
-  {
-    "log_id": "790871a1-9d82-4b1d-8224-e66ce6b816d5",
-    "timestamp": "2026-06-18T18:53:53.188651+00:00",
-    "action": "import_collection_dry_run",
-    "reader_id": null,
-    "book_id": null,
-    "detail": "DRY-RUN 校验通过，可导入 2 本书",
-    "success": true
-  },
-  {
-    "log_id": "6d051a4b-4209-4291-b644-d3cfbe41fe3a",
-    "timestamp": "2026-06-18T18:53:53.200088+00:00",
-    "action": "import_book",
-    "reader_id": null,
-    "book_id": "REVIEW-ZYX-01",
-    "detail": "批量导入书目: Reviewer Import 1",
-    "success": true
-  },
-  {
-    "log_id": "52b7280f-ec49-46f2-bf58-967ab27df801",
-    "timestamp": "2026-06-18T18:53:53.201665+00:00",
-    "action": "import_book",
-    "reader_id": null,
-    "book_id": "REVIEW-ZYX-02",
-    "detail": "批量导入书目: Reviewer Import 2",
-    "success": true
-  },
-  {
-    "log_id": "3ebeba1c-31c2-4faf-b423-daabed79cc46",
-    "timestamp": "2026-06-18T18:53:53.202594+00:00",
-    "action": "import_collection",
-    "reader_id": null,
-    "book_id": null,
-    "detail": "成功批量导入 2 本书",
-    "success": true
-  },
-  {
-    "log_id": "8da569c7-e51d-4be2-ba06-da2084df4a55",
-    "timestamp": "2026-06-18T18:53:53.208098+00:00",
-    "action": "reserve",
-    "reader_id": "REVIEW-READER-01",
-    "book_id": "REVIEW-ZYX-01",
-    "detail": "预约成功，状态=available",
-    "success": true
-  },
-  {
-    "log_id": "7061fb74-075e-4a09-bbe0-9851a746466b",
-    "timestamp": "2026-06-18T18:53:53.222995+00:00",
-    "action": "export_collection",
-    "reader_id": null,
-    "book_id": null,
-    "detail": "导出馆藏共 8 本书",
     "success": true
   }
 ]

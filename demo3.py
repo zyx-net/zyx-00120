@@ -259,7 +259,7 @@ if __name__ == "__main__":
         books_after_dup, _ = api("GET", "/api/books")
         assert_true(len(books_after_dup["data"]) == 4, "冲突时回滚，书仍为 4 本，IMPORT-BNEW 未写入")
 
-        section("场景 6：冲突检测 - 非法副本数")
+        section("场景 6：冲突检测 - 非法数值返回 conflicts 明细（409 而非 400）")
 
         conflict_data_copies = {
             "books": [
@@ -270,31 +270,53 @@ if __name__ == "__main__":
                     "borrow_days": 7,
                     "retain_hours": 1,
                 },
+                {
+                    "book_id": "IMPORT-BAD-02",
+                    "title": "负副本数",
+                    "total_copies": -5,
+                    "borrow_days": 7,
+                    "retain_hours": 1,
+                },
+                {
+                    "book_id": "IMPORT-BAD-03",
+                    "title": "非法借期",
+                    "total_copies": 3,
+                    "borrow_days": 0,
+                    "retain_hours": 1,
+                },
+                {
+                    "book_id": "IMPORT-BAD-04",
+                    "title": "负保留时长",
+                    "total_copies": 3,
+                    "borrow_days": 7,
+                    "retain_hours": -1,
+                },
             ]
         }
 
         copies_result, copies_status = api(
             "POST", "/api/collection/import?dry_run=true", conflict_data_copies
         )
-        assert_true(copies_status == 400, "非法副本数返回 HTTP 400（参数校验错误）")
-        assert_true(not copies_result["ok"], "非法副本数导入失败")
+        assert_true(copies_status == 409, "非法数值返回 HTTP 409（冲突）而非 400")
+        assert_true(not copies_result["ok"], "非法数值导入失败，ok=false")
+        assert_true("conflicts" in copies_result, "返回 conflicts 列表")
+        assert_true(len(copies_result["conflicts"]) == 4, f"检测到 4 个冲突，实际 {len(copies_result['conflicts'])}")
 
-        conflict_data_copies2 = {
-            "books": [
-                {
-                    "book_id": "IMPORT-BAD-02",
-                    "title": "非法副本数",
-                    "total_copies": -5,
-                    "borrow_days": 7,
-                    "retain_hours": 1,
-                },
-            ]
-        }
+        conflict_types = {c["type"] for c in copies_result["conflicts"]}
+        assert_true("invalid_copies" in conflict_types, "包含 invalid_copies 冲突类型")
+        assert_true("invalid_borrow_days" in conflict_types, "包含 invalid_borrow_days 冲突类型")
+        assert_true("invalid_retain_hours" in conflict_types, "包含 invalid_retain_hours 冲突类型")
 
-        copies2_result, copies2_status = api(
-            "POST", "/api/collection/import?dry_run=true", conflict_data_copies2
-        )
-        assert_true(copies2_status == 400, "负副本数返回 HTTP 400")
+        for c in copies_result["conflicts"]:
+            assert_true("book_id" in c, "冲突包含 book_id")
+            assert_true("index" in c, "冲突包含 index")
+            assert_true("message" in c, "冲突包含 message")
+            assert_true(c["type"] in ["invalid_copies", "invalid_borrow_days", "invalid_retain_hours"],
+                       f"冲突类型正确，实际: {c['type']}")
+
+        books_after_dry_bad, _ = api("GET", "/api/books")
+        assert_true(len(books_after_dry_bad["data"]) == 4,
+                   f"DRY-RUN 非法数值时不落库，书仍为 4 本，实际 {len(books_after_dry_bad['data'])}")
 
         section("场景 7：冲突检测 - 已有活跃预约的书目不能覆盖")
 
