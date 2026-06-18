@@ -160,6 +160,35 @@ def api_export(book_id):
     return jsonify({"ok": True, "data": snapshot}), 200
 
 
+@app.route("/api/collection/export", methods=["GET"])
+def api_export_collection():
+    export_data, err = service.export_collection()
+    if err:
+        return jsonify({"ok": False, "error": err}), 500
+    return jsonify({"ok": True, "data": export_data}), 200
+
+
+@app.route("/api/collection/import", methods=["POST"])
+def api_import_collection():
+    d = request.get_json(force=True)
+    dry_run = request.args.get("dry_run", "false").lower() == "true"
+    imported_count, conflicts, errors = service.import_collection(d, dry_run=dry_run)
+    if errors:
+        return jsonify({"ok": False, "error": errors}), 400
+    if conflicts:
+        return jsonify({
+            "ok": False,
+            "error": "导入存在冲突",
+            "conflicts": conflicts,
+            "dry_run": dry_run,
+        }), 409
+    return jsonify({
+        "ok": True,
+        "imported_count": imported_count,
+        "dry_run": dry_run,
+    }), 200 if not dry_run else 200
+
+
 @app.route("/api/expire", methods=["POST"])
 def api_trigger_expire():
     count = service.process_expired()

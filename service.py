@@ -366,3 +366,221 @@ def export_queue(book_id):
         "history": history,
     }
     return snapshot, None
+
+
+def _get_book_stats(book_id):
+    available = _available_copies(book_id)
+    to_pick = _count_active_status(book_id, "available")
+    waiting = _count_active_status(book_id, "waiting")
+    borrowed = _count_active_status(book_id, "borrowed")
+    return {
+        "available_copies": available,
+        "to_pick_count": to_pick,
+        "waiting_count": waiting,
+        "borrowed_count": borrowed,
+    }
+
+
+def _get_queue_summary(book_id):
+    queue = get_queue(book_id)
+    waiting = [r for r in queue if r["status"] == "waiting"]
+    available = [r for r in queue if r["status"] == "available"]
+    borrowed = [r for r in queue if r["status"] == "borrowed"]
+    return {
+        "total_active": len(queue),
+        "waiting": [
+            {"reader_id": r["reader_id"], "position": r.get("position", 0), "created_at": r["created_at"]}
+            for r in waiting
+        ],
+        "available": [
+            {"reader_id": r["reader_id"], "expire_at": r.get("expire_at"), "created_at": r["created_at"]}
+            for r in available
+        ],
+        "borrowed": [
+            {"reader_id": r["reader_id"], "borrowed_at": r.get("borrowed_at"), "created_at": r["created_at"]}
+            for r in borrowed
+        ],
+    }
+
+
+def export_collection():
+    books = store.list_books()
+    books_sorted = sorted(books, key=lambda b: b["book_id"])
+
+    export_data = {
+        "export_time": _now(),
+        "version": "1.0",
+        "total_books": len(books_sorted),
+        "books": [],
+    }
+
+    for book in books_sorted:
+        book_id = book["book_id"]
+        stats = _get_book_stats(book_id)
+        queue_summary = _get_queue_summary(book_id)
+
+        book_entry = {
+            "book_id": book["book_id"],
+            "title": book["title"],
+            "total_copies": book["total_copies"],
+            "borrow_days": book["borrow_days"],
+            "retain_hours": book["retain_hours"],
+            "stats": stats,
+            "queue_summary": queue_summary,
+        }
+        export_data["books"].append(book_entry)
+
+    _log("export_collection", True, detail=f"导出馆藏共 {len(books_sorted)} 本书")
+    return export_data, None
+
+
+def _validate_book_config(book_data, idx):
+    errors = []
+    required_fields = ["book_id", "title", "total_copies", "borrow_days", "retain_hours"]
+
+    for field in required_fields:
+        if field not in book_data:
+            errors.append(f"第 {idx} 条记录缺少必填字段: {field}")
+
+    if "book_id" in book_data:
+        if not isinstance(book_data["book_id"], str) or not book_data["book_id"].strip():
+            errors.append(f"第 {idx} 条记录 book_id 必须是非空字符串")
+
+    if "title" in book_data:
+        if not isinstance(book_data["title"], str) or not book_data["title"].strip():
+            errors.append(f"第 {idx} 条记录 title 必须是非空字符串")
+
+    if "total_copies" in book_data:
+        if not isinstance(book_data["total_copies"], int) or book_data["total_copies"] <= 0:
+            errors.append(f"第 {idx} 条记录 total_copies 必须是正整数，实际: {book_data['total_copies']}")
+
+    if "borrow_days" in book_data:
+        if not isinstance(book_data["borrow_days"], int) or book_data["borrow_days"] <= 0:
+            errors.append(f"第 {idx} 条记录 borrow_days 必须是正整数，实际: {book_data['borrow_days']}")
+
+    if "retain_hours" in book_data:
+        if not isinstance(book_data["retain_hours"], int) or book_data["retain_hours"] < 0:
+            errors.append(f"第 {idx} 条记录 retain_hours 必须是非负整数，实际: {book_data['retain_hours']}")
+
+    return errors
+
+
+def _has_active_reservations(book_id):
+    reservations = store.load_reservations()
+    active = [
+        r for r in reservations
+        if r["book_id"] == book_id and r["status"] in ("waiting", "available", "borrowed")
+    ]
+    return len(active) > 0
+
+
+def import_collection(import_data, dry_run=False):
+    conflicts = []
+    validation_errors = []
+
+    if not isinstance(import_data, dict):
+        return None, None, ["导入数据格式错误，应为 JSON 对象"]
+
+    books_data = import_data.get("books", [])
+    if not isinstance(books_data, list) or len(books_data) == 0:
+        return None, None, ["导入数据缺少 books 列表或列表为空"]
+
+    seen_book_ids = set()
+
+    for idx, book_data in enumerate(books_data):
+        errors = _validate_book_config(book_data, idx)
+        if errors:
+            validation_errors.extend(errors)
+            continue
+
+        book_id = book_data["book_id"]
+
+        if book_id in seen_book_ids:
+            conflicts.append({
+                "type": "duplicate_in_import",
+                "book_id": book_id,
+                "index": idx,
+                "message": f"导入文件中存在重复的 book_id: {book_id}",
+            })
+        seen_book_ids.add(book_id)
+
+        existing = store.load_book(book_id)
+        if existing:
+            conflict_type = "duplicate_book_id"
+            detail = f"书目 {book_id} 已存在"
+
+            if _has_active_reservations(book_id):
+                conflict_type = "has_active_reservations"
+                detail = f"书目 {book_id} 已有活跃预约（等待/待取/借阅中），不能覆盖"
+
+            conflicts.append({
+                "type": conflict_type,
+                "book_id": book_id,
+                "index": idx,
+                "existing_config": existing,
+                "import_config": {k: book_data[k] for k in ["title", "total_copies", "borrow_days", "retain_hours"]},
+                "message": detail,
+            })
+            continue
+
+        if book_data["total_copies"] <= 0:
+            conflicts.append({
+                "type": "invalid_copies",
+                "book_id": book_id,
+                "index": idx,
+                "message": f"书目 {book_id} 的 total_copies 非法: {book_data['total_copies']}",
+            })
+
+    if validation_errors:
+        return None, None, validation_errors
+
+    if conflicts:
+        if dry_run:
+            _log("import_collection_dry_run", False, detail=f"DRY-RUN 发现 {len(conflicts)} 个冲突")
+        else:
+            _log("import_collection", False, detail=f"导入发现 {len(conflicts)} 个冲突，已回滚")
+        return None, conflicts, None
+
+    if dry_run:
+        _log("import_collection_dry_run", True, detail=f"DRY-RUN 校验通过，可导入 {len(books_data)} 本书")
+        return len(books_data), None, None
+
+    with store._lock:
+        existing_books = store.list_books()
+        existing_ids = {b["book_id"] for b in existing_books}
+        import_ids = {b["book_id"] for b in books_data}
+        overlap = existing_ids & import_ids
+
+        if overlap:
+            _log("import_collection", False, detail=f"导入前检查发现冲突: {overlap}")
+            return None, [{
+                "type": "race_condition",
+                "book_id": bid,
+                "message": f"书目 {bid} 在导入过程中已被创建",
+            } for bid in overlap], None
+
+        saved_books = []
+        try:
+            for book_data in books_data:
+                book = {
+                    "book_id": book_data["book_id"],
+                    "title": book_data["title"],
+                    "total_copies": book_data["total_copies"],
+                    "borrow_days": book_data["borrow_days"],
+                    "retain_hours": book_data["retain_hours"],
+                }
+                store.save_book(book)
+                saved_books.append(book)
+                _log("import_book", True, book_id=book["book_id"],
+                     detail=f"批量导入书目: {book['title']}")
+        except Exception as e:
+            for book in saved_books:
+                store.delete_book(book["book_id"])
+            _log("import_collection", False, detail=f"导入异常，已回滚 {len(saved_books)} 本书: {str(e)}")
+            return None, [{
+                "type": "import_error",
+                "message": f"导入过程出错，已全部回滚: {str(e)}",
+            }], None
+
+    _log("import_collection", True, detail=f"成功批量导入 {len(saved_books)} 本书")
+    return len(saved_books), None, None

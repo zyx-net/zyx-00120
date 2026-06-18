@@ -4,7 +4,7 @@ import threading
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
-_lock = threading.Lock()
+_lock = threading.RLock()
 
 
 def _ensure_dir():
