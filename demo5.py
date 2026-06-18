@@ -53,8 +53,8 @@ def start_server():
     proc = subprocess.Popen(
         [sys.executable, "main.py"],
         cwd=PROJECT_DIR,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
         env=env,
     )
     for _ in range(30):
@@ -70,11 +70,21 @@ def start_server():
 
 def stop_server(proc):
     if proc and proc.poll() is None:
-        proc.terminate()
         try:
-            proc.wait(timeout=5)
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                    capture_output=True, timeout=10,
+                )
+            else:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except Exception:
+                    proc.kill()
         except Exception:
-            proc.kill()
+            pass
+    time.sleep(2)
     print("  [INFO] 服务已停止")
 
 
@@ -248,6 +258,23 @@ if __name__ == "__main__":
         assert_true(len(get_blacklist()) == 0, "DRY-RUN 后黑名单仍为空")
         assert_true(len(get_active_reservations()) == 0, "DRY-RUN 后活跃预约仍为空")
 
+        logs_after_dry = get_all_logs(limit=100)
+        dry_run_logs = [l for l in logs_after_dry if l["action"] == "import_snapshot_dry_run"]
+        assert_true(len(dry_run_logs) == 1, "DRY-RUN 写入 1 条 import_snapshot_dry_run 汇总日志")
+        for drl in dry_run_logs:
+            assert_true("book_id" not in drl or drl.get("book_id") is None,
+                        "DRY-RUN 汇总日志不带 book_id（不会被按书目过滤命中）")
+            assert_true("reader_id" not in drl or drl.get("reader_id") is None,
+                        "DRY-RUN 汇总日志不带 reader_id（不会被按读者过滤命中）")
+
+        snapshot_logs_in_dry = [l for l in logs_after_dry if l["action"].startswith("snapshot_import_")]
+        assert_true(len(snapshot_logs_in_dry) == 0,
+                    f"DRY-RUN 不写任何 snapshot_import_* 日志（实际 {len(snapshot_logs_in_dry)} 条）")
+
+        logs_b001_after_dry = get_logs_by_book("SNAP-B001")
+        assert_true(len(logs_b001_after_dry) == 0,
+                    "DRY-RUN 后按 book_id 查询无日志（不落库）")
+
         section("场景 3：正式导入到空环境，验证数据完整且顺序一致")
 
         import_r, import_s = api("POST", "/api/snapshot/import?dry_run=false", snapshot)
@@ -280,16 +307,30 @@ if __name__ == "__main__":
         assert_true(blacklist_ids_after == {"R-BLACK-001", "R-BLACK-002"},
                     f"导入的黑名单正确：{blacklist_ids_after}")
 
-        import_logs = get_logs_by_book("SNAP-B001")
-        snapshot_import_logs = [l for l in import_logs if l["action"] == "snapshot_import_book"]
-        assert_true(len(snapshot_import_logs) >= 1, "按 book_id 可查到 snapshot_import_book 日志")
+        import_logs_b001 = get_logs_by_book("SNAP-B001")
+        source_log_ids_b001 = {l["log_id"] for l in snapshot["logs"] if l.get("book_id") == "SNAP-B001"}
+        import_log_ids_b001 = {l["log_id"] for l in import_logs_b001}
+        assert_true(source_log_ids_b001 == import_log_ids_b001,
+                    f"按 book_id=SNAP-B001 查询，导入环境日志与源环境完全一致（不多不少）")
 
-        all_logs = get_all_logs(limit=100)
-        res_import_logs = [l for l in all_logs if l["action"] == "snapshot_import_reservation"]
-        assert_true(len(res_import_logs) == 4, f"有 4 条预约导入日志，实际 {len(res_import_logs)}")
+        import_logs_b002 = get_logs_by_book("SNAP-B002")
+        source_log_ids_b002 = {l["log_id"] for l in snapshot["logs"] if l.get("book_id") == "SNAP-B002"}
+        import_log_ids_b002 = {l["log_id"] for l in import_logs_b002}
+        assert_true(source_log_ids_b002 == import_log_ids_b002,
+                    f"按 book_id=SNAP-B002 查询，导入环境日志与源环境完全一致")
 
-        bl_import_logs = [l for l in all_logs if l["action"] == "snapshot_import_blacklist"]
-        assert_true(len(bl_import_logs) == 2, f"有 2 条黑名单导入日志，实际 {len(bl_import_logs)}")
+        all_logs_after_import = get_all_logs(limit=200)
+        snapshot_extra_logs = [l for l in all_logs_after_import if l["action"].startswith("snapshot_import_")]
+        assert_true(len(snapshot_extra_logs) == 0,
+                    f"按任何条件查询都不会命中 snapshot_import_* 串味日志（实际 {len(snapshot_extra_logs)} 条）")
+
+        import_summary_logs = [l for l in all_logs_after_import if l["action"] == "import_snapshot"]
+        assert_true(len(import_summary_logs) >= 1, "仅存在不带 book_id 的 import_snapshot 汇总日志")
+        for sl in import_summary_logs:
+            assert_true("book_id" not in sl or sl.get("book_id") is None,
+                        f"import_snapshot 汇总日志不带 book_id（不会被按书目过滤命中）")
+            assert_true("reader_id" not in sl or sl.get("reader_id") is None,
+                        f"import_snapshot 汇总日志不带 reader_id（不会被按读者过滤命中）")
 
         section("场景 4：冲突检测 - duplicate_book_id（目标已有相同书目）")
 
@@ -316,6 +357,18 @@ if __name__ == "__main__":
         assert_true("import_config" in conf_r["conflicts"][0], "冲突包含 import_config")
 
         assert_true(get_book_count() == 3, "冲突回滚，书目数仍为 3")
+        assert_true(len(get_blacklist()) == 2, "冲突回滚，黑名单仍为 2 人")
+        assert_true(len(get_active_reservations()) == 4, "冲突回滚，活跃预约仍为 4 条")
+
+        logs_after_conflict = get_logs_by_book("SNAP-B001")
+        log_ids_after_conflict = {l["log_id"] for l in logs_after_conflict}
+        assert_true(source_log_ids_b001 == log_ids_after_conflict,
+                    "冲突回滚后，按 book_id=SNAP-B001 查询日志与冲突前完全一致（整批回滚，不写半套）")
+
+        all_logs_conflict = get_all_logs(limit=200)
+        extra_logs_in_conflict = [l for l in all_logs_conflict if l["action"].startswith("snapshot_import_")]
+        assert_true(len(extra_logs_in_conflict) == 0,
+                    f"冲突回滚后，不存在任何 snapshot_import_* 串味日志（实际 {len(extra_logs_in_conflict)} 条）")
 
         print(f"    [冲突] {conf_r['conflicts'][0]['book_id']}: {conf_r['conflicts'][0]['type']} - {conf_r['conflicts'][0]['message']}")
 
@@ -557,8 +610,13 @@ if __name__ == "__main__":
             logs_after = get_logs_by_book(bid)
             log_ids_before = {l["log_id"] for l in logs_before_restart[bid]}
             log_ids_after = {l["log_id"] for l in logs_after}
-            assert_true(log_ids_before.issubset(log_ids_after),
-                        f"重启后 {bid} 的日志完整保留")
+            assert_true(log_ids_before == log_ids_after,
+                        f"重启后 {bid} 的日志完全一致（不多不少）：重启前 {len(log_ids_before)} 条，重启后 {len(log_ids_after)} 条")
+
+        all_logs_after_restart = get_all_logs(limit=200)
+        extra_after_restart = [l for l in all_logs_after_restart if l["action"].startswith("snapshot_import_")]
+        assert_true(len(extra_after_restart) == 0,
+                    f"重启后仍不存在任何 snapshot_import_* 串味日志（实际 {len(extra_after_restart)} 条）")
 
         blacklist_after_restart = get_blacklist()
         bl_ids_before = {b["reader_id"] for b in blacklist_before_restart}
@@ -584,7 +642,25 @@ if __name__ == "__main__":
         r, s = api("POST", "/api/checkout", {"book_id": "SNAP-B003", "reader_id": "R-SNAP-005"})
         assert_true(s == 200 and r["ok"], "可正常借出导入的书目")
 
-        section("场景 11：完整迁移流程模拟（A环境导出 -> B环境导入）")
+        section("场景 11：完整迁移流程模拟（A环境导出 -> B环境导入，同口径日志完全一致）")
+
+        a_env_books_r, _ = api("GET", "/api/books")
+        a_env_book_ids = {b["book_id"] for b in a_env_books_r["data"]}
+
+        a_env_logs_by_book = {}
+        for bid in a_env_book_ids:
+            logs = get_logs_by_book(bid)
+            a_env_logs_by_book[bid] = {l["log_id"] for l in logs}
+
+        a_env_queue = {}
+        for bid in a_env_book_ids:
+            a_env_queue[bid] = get_active_reservations(bid)
+
+        a_env_available = {}
+        for bid in a_env_book_ids:
+            a_env_available[bid] = get_available_copies(bid)
+
+        a_env_blacklist = get_blacklist()
 
         export_r2, _ = api("GET", "/api/snapshot/export")
         snapshot_a = export_r2["data"]
@@ -604,31 +680,61 @@ if __name__ == "__main__":
                     f"B 环境书目数匹配：{snapshot_a['counts']['books']} -> {book_count_b}")
 
         queue_b = get_active_reservations("SNAP-B001")
-        assert_true(len(queue_b) == 3, f"B 环境 SNAP-B001 队列有 3 人")
-        for i, r in enumerate(sorted(queue_b, key=lambda x: x["created_at"])):
-            assert_true(r["reader_id"] == readers_waiting[i],
-                        f"B 环境队列顺序正确：位置 {i+1} 是 {readers_waiting[i]}")
+        assert_true(len(queue_b) == len(a_env_queue["SNAP-B001"]),
+                    f"B 环境 SNAP-B001 队列长度匹配 A 环境")
+        for r_b, r_a in zip(
+            sorted(queue_b, key=lambda x: x["created_at"]),
+            sorted(a_env_queue["SNAP-B001"], key=lambda x: x["created_at"]),
+        ):
+            assert_true(r_b["reader_id"] == r_a["reader_id"],
+                        f"B 环境队列顺序与 A 环境一致：{r_a['reader_id']}")
+            assert_true(r_b["status"] == r_a["status"],
+                        f"B 环境 {r_a['reader_id']} 状态与 A 环境一致：{r_a['status']}")
 
         blacklist_b = get_blacklist()
-        assert_true(len(blacklist_b) == 2, f"B 环境黑名单有 2 人")
+        assert_true(len(blacklist_b) == len(a_env_blacklist),
+                    f"B 环境黑名单人数匹配 A 环境")
+        bl_ids_a = {b["reader_id"] for b in a_env_blacklist}
+        bl_ids_b = {b["reader_id"] for b in blacklist_b}
+        assert_true(bl_ids_a == bl_ids_b, "B 环境黑名单集合与 A 环境一致")
+
+        for bid in a_env_book_ids:
+            logs_b = get_logs_by_book(bid)
+            log_ids_b = {l["log_id"] for l in logs_b}
+            assert_true(a_env_logs_by_book[bid] == log_ids_b,
+                        f"B 环境按 book_id={bid} 查询日志与 A 环境完全一致（不多不少）：A={len(a_env_logs_by_book[bid])}条，B={len(log_ids_b)}条")
+
+        for bid in a_env_book_ids:
+            avail_b = get_available_copies(bid)
+            assert_true(a_env_available[bid] == avail_b,
+                        f"B 环境 {bid} 可借状态与 A 环境一致：{a_env_available[bid]}")
+
+        b_all_logs = get_all_logs(limit=500)
+        b_extra_logs = [l for l in b_all_logs if l["action"].startswith("snapshot_import_")]
+        assert_true(len(b_extra_logs) == 0,
+                    f"B 环境不存在任何 snapshot_import_* 串味日志（实际 {len(b_extra_logs)} 条）")
 
         print(f"\n  [迁移成功] A -> B 完整迁移完成")
         print(f"    书目: {snapshot_a['counts']['books']} 本")
         print(f"    活跃预约: {snapshot_a['counts']['active_reservations']} 条")
         print(f"    黑名单: {snapshot_a['counts']['blacklist']} 条")
+        print(f"    同口径日志一致: 是（按 book_id 查询，A/B 环境结果完全一致）")
+        print(f"    串味日志: 无（未写入任何 snapshot_import_* 带过滤字段的日志）")
 
         print("\n" + "=" * 60)
         print("  完整快照迁移回归测试全部通过!")
         print("=" * 60)
-        print("\n  新增能力总结:")
+        print("\n  能力总结:")
         print("  1. GET /api/snapshot/export - 导出完整快照（书目+活跃预约+黑名单+相关日志）")
         print("  2. POST /api/snapshot/import - 导入完整快照（支持 dry-run 预检）")
         print("  3. 冲突检测：duplicate_book_id / duplicate_reservation / blacklist_conflict / missing_dependency")
-        print("  4. 整批回滚：冲突时完整回滚，绝不写半套数据")
-        print("  5. 队列顺序一致：按 created_at 排序，重启后保持不变")
-        print("  6. 可借状态一致：status 字段完整保留，重启后不变")
-        print("  7. 日志查询一致：导出相关日志，重启后可追溯")
-        print("  8. 并发安全：加锁 + 二次校验，防止并发冲突")
+        print("  4. 整批回滚：冲突时完整回滚，绝不写半套数据（含日志回滚）")
+        print("  5. 队列顺序一致：按 created_at 排序，导入/重启后保持不变")
+        print("  6. 可借状态一致：status 字段完整保留，导入/重启后不变")
+        print("  7. 日志查询一致：同口径（book_id/reader_id）查询，源/导入环境结果完全一致")
+        print("  8. 不写串味日志：导入汇总日志不带 book_id/reader_id，不会被按书目/读者过滤命中")
+        print("  9. Dry-Run 不落库：仅校验不写入，所有数据（含日志）保持原状")
+        print("  10. 并发安全：加锁 + 二次校验，防止并发冲突")
 
     finally:
         stop_server(server_proc)

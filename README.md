@@ -688,12 +688,12 @@ curl -X POST http://127.0.0.1:5000/api/snapshot/import?dry_run=false \
 - **原子性**：只要有任何冲突或错误，所有数据全部回滚，不会出现"写一半"的情况
 - **顺序一致性**：队列顺序由 `created_at` 决定，导入后与源环境完全一致
 - **状态一致性**：`status` 字段完整保留（waiting/available/borrowed），可借状态计算结果与源环境一致
-- **日志完整性**：
-  - 每本书导入有单独日志（`action: snapshot_import_book`）
-  - 每条预约导入有单独日志（`action: snapshot_import_reservation`）
-  - 每条黑名单导入有单独日志（`action: snapshot_import_blacklist`）
-  - 整个快照导入有汇总日志（`action: import_snapshot`）
-  - Dry-Run 操作也有日志（`action: import_snapshot_dry_run`）
+- **日志一致性**：
+  - 仅写入汇总日志（`action: import_snapshot`，不带 book_id / reader_id），不会被按书目/读者过滤命中
+  - Dry-Run 预检日志（`action: import_snapshot_dry_run`，不带 book_id / reader_id）
+  - 导入异常日志（`action: import_snapshot`，不带 book_id / reader_id）
+  - **同口径查询一致**：同一份快照在源环境和导入环境，按相同条件（`book_id` / `reader_id`）查询，返回结果集合完全一致
+  - 快照中携带的历史操作日志完整保留，导入后可按原条件追溯
 - **并发安全**：加锁 + 导入前二次校验，防止并发冲突
 - **持久化保证**：所有数据写入 JSON 文件，服务重启后完整恢复
 
@@ -822,12 +822,12 @@ python demo5.py
    - **可借状态一致**：`status` 字段完整保留，可借副本数计算结果与源环境一致
    - **日志查询一致**：导出相关日志，导入后可追溯，重启后可查询
 
-4. **日志完整性**
-   - 单本书导入日志 (`action: snapshot_import_book`)
-   - 单条预约导入日志 (`action: snapshot_import_reservation`)
-   - 单条黑名单导入日志 (`action: snapshot_import_blacklist`)
-   - 批量导入汇总日志 (`action: import_snapshot`)
-   - Dry-Run 操作日志 (`action: import_snapshot_dry_run`)
+4. **日志一致性**
+   - 仅写入批量导入汇总日志 (`action: import_snapshot`，不带 book_id)，避免按 book_id 查询时串味
+   - Dry-Run 操作日志 (`action: import_snapshot_dry_run`，不带 book_id)
+   - 导入过程异常日志 (`action: import_snapshot`，不带 book_id)
+   - **同口径查询一致**：同一份快照在源环境和导入环境，按 `book_id` / `reader_id` 查询日志，结果集合完全一致（不会多出导入相关记录）
+   - 快照中携带的历史日志完整保留，导入后可按原条件追溯
 
 5. **测试覆盖** (`demo5.py`)
    - 11 个测试场景，覆盖导出、dry-run、冲突回滚、重启一致性、功能可用性

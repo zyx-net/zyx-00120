@@ -1,7 +1,7 @@
 [
   {
-    "log_id": "f41279a0-35cb-46f0-9cb7-cff0c41c5224",
-    "timestamp": "2026-06-18T19:44:06.550477+00:00",
+    "log_id": "08d74721-4006-4719-97ec-ef15dc4371df",
+    "timestamp": "2026-06-18T21:19:41.546060+00:00",
     "action": "import_book",
     "reader_id": null,
     "book_id": "BASE-B001",
@@ -9,8 +9,8 @@
     "success": true
   },
   {
-    "log_id": "4ab52693-a0f0-4bd6-8e3c-5cf510e788f0",
-    "timestamp": "2026-06-18T19:44:06.552163+00:00",
+    "log_id": "29c135eb-1e7e-4317-b995-5ae47865bf43",
+    "timestamp": "2026-06-18T21:19:41.548145+00:00",
     "action": "import_book",
     "reader_id": null,
     "book_id": "BASE-B002",
@@ -18,8 +18,8 @@
     "success": true
   },
   {
-    "log_id": "93028979-4ac1-4f3c-862c-f562e2b0a5b5",
-    "timestamp": "2026-06-18T19:44:06.553747+00:00",
+    "log_id": "576d1030-0e4b-4b55-a2b7-602d65435c96",
+    "timestamp": "2026-06-18T21:19:41.549753+00:00",
     "action": "import_book",
     "reader_id": null,
     "book_id": "BASE-B003",
@@ -27,8 +27,8 @@
     "success": true
   },
   {
-    "log_id": "ceb7a73d-e4bc-4189-81d2-c22acdd37252",
-    "timestamp": "2026-06-18T19:44:06.554598+00:00",
+    "log_id": "b0119b7e-ea60-4f53-aa2e-c19692a11bf7",
+    "timestamp": "2026-06-18T21:19:41.550649+00:00",
     "action": "import_collection",
     "reader_id": null,
     "book_id": null,
@@ -36,8 +36,8 @@
     "success": true
   },
   {
-    "log_id": "9f9ba122-0483-4b83-8d95-205a41dc2950",
-    "timestamp": "2026-06-18T19:44:06.573827+00:00",
+    "log_id": "8b073d1c-67bb-4d23-8673-94291ccee103",
+    "timestamp": "2026-06-18T21:19:41.571952+00:00",
     "action": "import_collection_dry_run",
     "reader_id": null,
     "book_id": null,
@@ -45,8 +45,8 @@
     "success": false
   },
   {
-    "log_id": "6a2f1ca2-e321-4e38-9a40-ba9acc7f88f6",
-    "timestamp": "2026-06-18T19:44:06.689435+00:00",
+    "log_id": "7ec3f6ed-20e3-4008-b08d-810688493312",
+    "timestamp": "2026-06-18T21:19:41.607591+00:00",
     "action": "import_collection",
     "reader_id": null,
     "book_id": null,
@@ -54,8 +54,8 @@
     "success": false
   },
   {
-    "log_id": "aeb1df26-2086-4bf9-ac39-c68b2c578dbc",
-    "timestamp": "2026-06-18T19:44:06.706806+00:00",
+    "log_id": "ca611a9c-9d39-4307-af1b-47414aebecdf",
+    "timestamp": "2026-06-18T21:19:41.629772+00:00",
     "action": "reserve",
     "reader_id": "R-TEST-001",
     "book_id": "BASE-B001",
@@ -63,8 +63,8 @@
     "success": true
   },
   {
-    "log_id": "693386fd-46ee-4e11-8d9f-d380f00c2368",
-    "timestamp": "2026-06-18T19:44:06.710103+00:00",
+    "log_id": "0e497da1-6d0b-46f3-929e-d1db338c0c8e",
+    "timestamp": "2026-06-18T21:19:41.634797+00:00",
     "action": "import_collection",
     "reader_id": null,
     "book_id": null,
@@ -72,8 +72,8 @@
     "success": false
   },
   {
-    "log_id": "11f2d6ef-623c-4b47-bf32-84ac98cf2df1",
-    "timestamp": "2026-06-18T19:44:06.713764+00:00",
+    "log_id": "df12da71-1499-445e-9930-ee37f7d21b31",
+    "timestamp": "2026-06-18T21:19:41.639708+00:00",
     "action": "import_collection",
     "reader_id": null,
     "book_id": null,
@@ -81,8 +81,8 @@
     "success": false
   },
   {
-    "log_id": "f9de92c6-2023-4fda-8162-97ebfb721be4",
-    "timestamp": "2026-06-18T19:44:08.322573+00:00",
+    "log_id": "e8c7f293-ea7f-4ee5-8eb3-3a02578b4ee2",
+    "timestamp": "2026-06-18T21:19:43.204610+00:00",
     "action": "import_collection_dry_run",
     "reader_id": null,
     "book_id": null,

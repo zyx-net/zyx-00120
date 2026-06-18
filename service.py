@@ -912,21 +912,6 @@ def import_snapshot(snapshot_data, dry_run=False):
             all_blacklist = existing_bl + blacklist_data
             store.save_all_blacklist(all_blacklist)
 
-            for book_data in books_data:
-                _log("snapshot_import_book", True, book_id=book_data["book_id"],
-                     detail=f"快照导入书目: {book_data['title']}")
-
-            for res_data in reservations_data:
-                _log("snapshot_import_reservation", True,
-                     book_id=res_data["book_id"],
-                     reader_id=res_data["reader_id"],
-                     detail=f"快照导入预约: {res_data['book_id']} / {res_data['reader_id']} 状态={res_data['status']}")
-
-            for bl_data in blacklist_data:
-                _log("snapshot_import_blacklist", True,
-                     reader_id=bl_data["reader_id"],
-                     detail=f"快照导入黑名单: {bl_data['reader_id']}")
-
             all_logs = store.load_logs()
             for log_entry in logs_data:
                 if "log_id" not in log_entry:
