@@ -201,21 +201,30 @@ def api_export_snapshot():
 def api_import_snapshot():
     d = request.get_json(force=True)
     dry_run = request.args.get("dry_run", "false").lower() == "true"
-    imported_counts, conflicts, errors = service.import_snapshot(d, dry_run=dry_run)
+    imported_counts, conflicts, errors, report = service.import_snapshot(d, dry_run=dry_run)
     if errors:
-        return jsonify({"ok": False, "error": errors}), 400
+        resp = {"ok": False, "error": errors, "dry_run": dry_run}
+        if report is not None:
+            resp["report"] = report
+        return jsonify(resp), 400
     if conflicts:
-        return jsonify({
+        resp = {
             "ok": False,
             "error": "快照导入存在冲突",
             "conflicts": conflicts,
             "dry_run": dry_run,
-        }), 409
-    return jsonify({
+        }
+        if report is not None:
+            resp["report"] = report
+        return jsonify(resp), 409
+    resp = {
         "ok": True,
         "imported_counts": imported_counts,
         "dry_run": dry_run,
-    }), 200
+    }
+    if report is not None:
+        resp["report"] = report
+    return jsonify(resp), 200
 
 
 @app.route("/api/snapshot/precheck", methods=["POST"])

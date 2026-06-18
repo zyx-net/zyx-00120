@@ -1127,35 +1127,7 @@ def _analyze_snapshot_conflicts(snapshot_data):
     }, conflicts, None, format_errors, log_issues)
 
 
-def precheck_snapshot(snapshot_data):
-    try:
-        parsed, conflicts, errors, format_errors, log_issues = _analyze_snapshot_conflicts(snapshot_data)
-    except Exception as e:
-        error_result = {
-            "dry_run": True,
-            "can_import": False,
-            "summary": {
-                "status": "internal_error",
-                "total_format_errors": 1,
-                "total_conflicts": 0,
-                "total_will_add": 0,
-                "total_missing_dependencies": 0,
-                "message": f"预检过程中发生内部错误（已捕获，不影响服务稳定性）：{str(e)}",
-            },
-            "details": {
-                "books": {"will_add": [], "conflicts": [], "missing_dependencies": [], "format_errors": [
-                    {"index": None, "field": None, "error_code": "precheck_internal_error",
-                     "message": f"内部异常: {str(e)}", "blocks_other_blocks": True, "blocks_current_block": True}
-                ]},
-                "active_reservations": {"will_add": [], "conflicts": [], "missing_dependencies": [], "format_errors": []},
-                "blacklist": {"will_add": [], "conflicts": [], "missing_dependencies": [], "format_errors": []},
-                "logs": {"will_add": [], "conflicts": [], "missing_dependencies": [], "format_errors": []},
-            },
-        }
-        _log("precheck_snapshot", False,
-             detail=f"预检内部异常: {str(e)}")
-        return error_result, None
-
+def _build_snapshot_report(parsed, conflicts, errors, format_errors, log_issues):
     result = {
         "dry_run": True,
         "can_import": False,
@@ -1163,6 +1135,8 @@ def precheck_snapshot(snapshot_data):
         "details": {
             "books": {
                 "will_add": [],
+                "will_skip": [],
+                "will_block": [],
                 "conflicts": [],
                 "missing_dependencies": [],
                 "format_errors": [],
@@ -1170,6 +1144,8 @@ def precheck_snapshot(snapshot_data):
             },
             "active_reservations": {
                 "will_add": [],
+                "will_skip": [],
+                "will_block": [],
                 "conflicts": [],
                 "missing_dependencies": [],
                 "format_errors": [],
@@ -1177,6 +1153,8 @@ def precheck_snapshot(snapshot_data):
             },
             "blacklist": {
                 "will_add": [],
+                "will_skip": [],
+                "will_block": [],
                 "conflicts": [],
                 "missing_dependencies": [],
                 "format_errors": [],
@@ -1184,6 +1162,8 @@ def precheck_snapshot(snapshot_data):
             },
             "logs": {
                 "will_add": [],
+                "will_skip": [],
+                "will_block": [],
                 "conflicts": [],
                 "missing_dependencies": [],
                 "format_errors": [],
@@ -1203,12 +1183,12 @@ def precheck_snapshot(snapshot_data):
             "total_format_errors": total_fe,
             "total_conflicts": 0,
             "total_will_add": 0,
+            "total_will_skip": 0,
+            "total_will_block": total_fe,
             "total_missing_dependencies": 0,
             "message": "快照顶层格式有误（非字典或版本号不对），无法进行完整预检",
         }
-        _log("precheck_snapshot", False,
-             detail=f"预检失败：{total_fe} 个顶层格式错误")
-        return result, None
+        return result
 
     books_data = parsed["books"]
     reservations_data = parsed["active_reservations"]
@@ -1225,9 +1205,25 @@ def precheck_snapshot(snapshot_data):
 
     for idx, book in enumerate(books_data):
         if idx in bad_book_indices:
+            fe_list = [fe for fe in format_errors.get("books", []) if fe.get("index") == idx]
+            for fe in fe_list:
+                result["details"]["books"]["will_block"].append({
+                    "index": idx,
+                    "book_id": book.get("book_id") if isinstance(book, dict) else None,
+                    "reason": fe.get("message", ""),
+                    "error_code": fe.get("error_code"),
+                })
             continue
         book_id = book["book_id"]
         if book_id in conflict_book_ids:
+            c_list = [c for c in conflicts if c["section"] == "books" and c.get("book_id") == book_id]
+            for c in c_list:
+                result["details"]["books"]["will_skip"].append({
+                    "index": idx,
+                    "book_id": book_id,
+                    "reason": c.get("message", ""),
+                    "conflict_type": c.get("type"),
+                })
             continue
         result["details"]["books"]["will_add"].append({
             "book_id": book_id,
@@ -1250,11 +1246,42 @@ def precheck_snapshot(snapshot_data):
 
     for idx, res in enumerate(reservations_data):
         if idx in bad_res_indices:
+            fe_list = [fe for fe in format_errors.get("active_reservations", []) if fe.get("index") == idx]
+            for fe in fe_list:
+                result["details"]["active_reservations"]["will_block"].append({
+                    "index": idx,
+                    "reader_id": res.get("reader_id") if isinstance(res, dict) else None,
+                    "reason": fe.get("message", ""),
+                    "error_code": fe.get("error_code"),
+                })
             continue
         res_key = (res["book_id"], res["reader_id"])
         if res["book_id"] not in book_ids_in_snapshot:
+            miss_list = [c for c in conflicts if c["section"] == "active_reservations"
+                         and c["type"] == "missing_dependency"
+                         and c.get("book_id") == res["book_id"]
+                         and c.get("reader_id") == res["reader_id"]]
+            for m in miss_list:
+                result["details"]["active_reservations"]["will_skip"].append({
+                    "index": idx,
+                    "reader_id": res["reader_id"],
+                    "book_id": res["book_id"],
+                    "reason": m.get("message", ""),
+                    "conflict_type": "missing_dependency",
+                })
             continue
         if res_key in conflict_res_keys:
+            c_list = [c for c in conflicts if c["section"] == "active_reservations"
+                      and c.get("book_id") == res["book_id"]
+                      and c.get("reader_id") == res["reader_id"]]
+            for c in c_list:
+                result["details"]["active_reservations"]["will_skip"].append({
+                    "index": idx,
+                    "reader_id": res["reader_id"],
+                    "book_id": res["book_id"],
+                    "reason": c.get("message", ""),
+                    "conflict_type": c.get("type"),
+                })
             continue
         result["details"]["active_reservations"]["will_add"].append({
             "reservation_id": res["reservation_id"],
@@ -1273,9 +1300,25 @@ def precheck_snapshot(snapshot_data):
 
     for idx, bl in enumerate(blacklist_data):
         if idx in bad_bl_indices:
+            fe_list = [fe for fe in format_errors.get("blacklist", []) if fe.get("index") == idx]
+            for fe in fe_list:
+                result["details"]["blacklist"]["will_block"].append({
+                    "index": idx,
+                    "reader_id": bl.get("reader_id") if isinstance(bl, dict) else None,
+                    "reason": fe.get("message", ""),
+                    "error_code": fe.get("error_code"),
+                })
             continue
         reader_id = bl["reader_id"]
         if reader_id in conflict_reader_ids:
+            c_list = [c for c in conflicts if c["section"] == "blacklist" and c.get("reader_id") == reader_id]
+            for c in c_list:
+                result["details"]["blacklist"]["will_skip"].append({
+                    "index": idx,
+                    "reader_id": reader_id,
+                    "reason": c.get("message", ""),
+                    "conflict_type": c.get("type"),
+                })
             continue
         result["details"]["blacklist"]["will_add"].append({
             "reader_id": reader_id,
@@ -1284,17 +1327,42 @@ def precheck_snapshot(snapshot_data):
         })
 
     bad_log_indices = {fe["index"] for fe in format_errors.get("logs", [])}
+    issue_log_ids = set()
+    for iss in (log_issues or []):
+        if iss.get("index") is not None:
+            issue_log_ids.add(iss["index"])
 
     for idx, log in enumerate(logs_data):
         if idx in bad_log_indices:
+            fe_list = [fe for fe in format_errors.get("logs", []) if fe.get("index") == idx]
+            for fe in fe_list:
+                result["details"]["logs"]["will_block"].append({
+                    "index": idx,
+                    "log_id": log.get("log_id") if isinstance(log, dict) else None,
+                    "reason": fe.get("message", ""),
+                    "error_code": fe.get("error_code"),
+                })
             continue
-        result["details"]["logs"]["will_add"].append({
+        log_entry = {
             "log_id": log.get("log_id", "(auto-generated)"),
             "action": log.get("action", "unknown"),
             "timestamp": log.get("timestamp", ""),
             "book_id": log.get("book_id"),
             "reader_id": log.get("reader_id"),
-        })
+        }
+        if idx in issue_log_ids:
+            iss_list = [iss for iss in (log_issues or []) if iss.get("index") == idx]
+            result["details"]["logs"]["will_add"].append(log_entry)
+            for iss in iss_list:
+                result["details"]["logs"]["will_skip"].append({
+                    "index": idx,
+                    "log_id": log.get("log_id"),
+                    "reason": iss.get("message", ""),
+                    "issue_type": iss.get("type"),
+                    "note": "非阻断问题，仍可导入，建议关注",
+                })
+        else:
+            result["details"]["logs"]["will_add"].append(log_entry)
 
     for c in conflicts:
         section = c["section"]
@@ -1309,32 +1377,49 @@ def precheck_snapshot(snapshot_data):
         len(result["details"]["blacklist"]["will_add"]) +
         len(result["details"]["logs"]["will_add"])
     )
+    total_will_skip = (
+        len(result["details"]["books"]["will_skip"]) +
+        len(result["details"]["active_reservations"]["will_skip"]) +
+        len(result["details"]["blacklist"]["will_skip"]) +
+        len(result["details"]["logs"]["will_skip"])
+    )
+    total_will_block = (
+        len(result["details"]["books"]["will_block"]) +
+        len(result["details"]["active_reservations"]["will_block"]) +
+        len(result["details"]["blacklist"]["will_block"]) +
+        len(result["details"]["logs"]["will_block"])
+    )
     total_conflicts = sum(len(result["details"][s]["conflicts"]) for s in result["details"])
     total_missing = sum(len(result["details"][s]["missing_dependencies"]) for s in result["details"])
     total_format_errors = sum(len(result["details"][s]["format_errors"]) for s in result["details"])
     total_issues = sum(len(result["details"][s].get("issues", [])) for s in result["details"])
     total_all_errors = total_format_errors + total_issues
 
-    can_import = total_conflicts == 0 and total_missing == 0 and total_all_errors == 0
+    can_import = total_conflicts == 0 and total_missing == 0 and total_format_errors == 0
 
-    if can_import:
+    if can_import and total_issues == 0:
         status = "ready"
         message = "预检通过，可以安全导入"
-    elif total_format_errors > 0 or total_issues > 0:
+    elif total_format_errors > 0:
         status = "format_error"
-        message = "存在格式错误或日志问题，需先修正数据格式"
+        message = "存在格式错误，需先修正数据格式"
     elif total_conflicts > 0:
         status = "has_conflicts"
         message = "存在冲突，需解决冲突后再导入"
-    else:
+    elif total_missing > 0:
         status = "missing_dependency"
         message = "存在缺失依赖，需补充相关数据或调整导入内容"
+    else:
+        status = "has_warnings"
+        message = "校验通过（有非阻断告警），可导入，但建议关注日志问题"
 
     result["can_import"] = can_import
     result["summary"] = {
         "status": status,
         "message": message,
         "total_will_add": total_will_add,
+        "total_will_skip": total_will_skip,
+        "total_will_block": total_will_block,
         "total_conflicts": total_conflicts,
         "total_missing_dependencies": total_missing,
         "total_format_errors": total_format_errors,
@@ -1342,6 +1427,8 @@ def precheck_snapshot(snapshot_data):
         "breakdown": {
             "books": {
                 "will_add": len(result["details"]["books"]["will_add"]),
+                "will_skip": len(result["details"]["books"]["will_skip"]),
+                "will_block": len(result["details"]["books"]["will_block"]),
                 "conflicts": len(result["details"]["books"]["conflicts"]),
                 "missing_dependencies": len(result["details"]["books"]["missing_dependencies"]),
                 "format_errors": len(result["details"]["books"]["format_errors"]),
@@ -1349,6 +1436,8 @@ def precheck_snapshot(snapshot_data):
             },
             "active_reservations": {
                 "will_add": len(result["details"]["active_reservations"]["will_add"]),
+                "will_skip": len(result["details"]["active_reservations"]["will_skip"]),
+                "will_block": len(result["details"]["active_reservations"]["will_block"]),
                 "conflicts": len(result["details"]["active_reservations"]["conflicts"]),
                 "missing_dependencies": len(result["details"]["active_reservations"]["missing_dependencies"]),
                 "format_errors": len(result["details"]["active_reservations"]["format_errors"]),
@@ -1356,6 +1445,8 @@ def precheck_snapshot(snapshot_data):
             },
             "blacklist": {
                 "will_add": len(result["details"]["blacklist"]["will_add"]),
+                "will_skip": len(result["details"]["blacklist"]["will_skip"]),
+                "will_block": len(result["details"]["blacklist"]["will_block"]),
                 "conflicts": len(result["details"]["blacklist"]["conflicts"]),
                 "missing_dependencies": len(result["details"]["blacklist"]["missing_dependencies"]),
                 "format_errors": len(result["details"]["blacklist"]["format_errors"]),
@@ -1363,6 +1454,8 @@ def precheck_snapshot(snapshot_data):
             },
             "logs": {
                 "will_add": len(result["details"]["logs"]["will_add"]),
+                "will_skip": len(result["details"]["logs"]["will_skip"]),
+                "will_block": len(result["details"]["logs"]["will_block"]),
                 "conflicts": len(result["details"]["logs"]["conflicts"]),
                 "missing_dependencies": len(result["details"]["logs"]["missing_dependencies"]),
                 "format_errors": len(result["details"]["logs"]["format_errors"]),
@@ -1373,10 +1466,44 @@ def precheck_snapshot(snapshot_data):
         "availability_check": _check_availability(books_data, reservations_data),
     }
 
-    _log("precheck_snapshot", can_import,
-         detail=f"预检完成：状态={status}, 可添加={total_will_add}, 冲突={total_conflicts}, 缺依赖={total_missing}, 格式错={total_format_errors}, 日志问题={total_issues}")
+    return result
 
-    return result, None
+
+def precheck_snapshot(snapshot_data):
+    try:
+        parsed, conflicts, errors, format_errors, log_issues = _analyze_snapshot_conflicts(snapshot_data)
+    except Exception as e:
+        error_result = {
+            "dry_run": True,
+            "can_import": False,
+            "summary": {
+                "status": "internal_error",
+                "total_format_errors": 1,
+                "total_conflicts": 0,
+                "total_will_add": 0,
+                "total_will_skip": 0,
+                "total_will_block": 1,
+                "total_missing_dependencies": 0,
+                "message": f"预检过程中发生内部错误（已捕获，不影响服务稳定性）：{str(e)}",
+            },
+            "details": {
+                "books": {"will_add": [], "will_skip": [], "will_block": [],
+                          "conflicts": [], "missing_dependencies": [], "format_errors": [
+                    {"index": None, "field": None, "error_code": "precheck_internal_error",
+                     "message": f"内部异常: {str(e)}", "blocks_other_blocks": True, "blocks_current_block": True}
+                ], "issues": []},
+                "active_reservations": {"will_add": [], "will_skip": [], "will_block": [],
+                                        "conflicts": [], "missing_dependencies": [], "format_errors": [], "issues": []},
+                "blacklist": {"will_add": [], "will_skip": [], "will_block": [],
+                              "conflicts": [], "missing_dependencies": [], "format_errors": [], "issues": []},
+                "logs": {"will_add": [], "will_skip": [], "will_block": [],
+                         "conflicts": [], "missing_dependencies": [], "format_errors": [], "issues": []},
+            },
+        }
+        return error_result, None
+
+    report = _build_snapshot_report(parsed, conflicts, errors, format_errors, log_issues)
+    return report, None
 
 
 def _check_queue_order(reservations_data, book_ids_in_snapshot):
@@ -1421,31 +1548,32 @@ def import_snapshot(snapshot_data, dry_run=False):
     try:
         parsed, conflicts, errors, format_errors, log_issues = _analyze_snapshot_conflicts(snapshot_data)
     except Exception as e:
-        return None, None, [f"快照数据解析异常: {str(e)}"]
+        return None, None, [f"快照数据解析异常: {str(e)}"], None
+
+    report = _build_snapshot_report(parsed, conflicts, errors, format_errors, log_issues)
 
     total_format_errors = sum(len(v) for v in format_errors.values()) if format_errors else 0
-    total_log_issues = len(log_issues) if log_issues else 0
 
     if errors and parsed is None:
-        return None, None, errors
+        if dry_run:
+            return None, None, errors, report
+        return None, None, errors, None
 
-    if total_format_errors > 0 or total_log_issues > 0:
+    if total_format_errors > 0:
         format_err_messages = []
         for sec, fe_list in format_errors.items():
             for fe in fe_list:
                 format_err_messages.append(f"[{sec}] {fe.get('message', str(fe))}")
-        for li in (log_issues or []):
-            format_err_messages.append(f"[logs] {li.get('message', str(li))}")
-        return None, None, format_err_messages
+        if dry_run:
+            return None, None, format_err_messages, report
+        return None, None, format_err_messages, None
 
     if conflicts:
-        if dry_run:
-            _log("import_snapshot_dry_run", False,
-                 detail=f"DRY-RUN 快照导入发现 {len(conflicts)} 个冲突")
-        else:
+        if not dry_run:
             _log("import_snapshot", False,
                  detail=f"快照导入发现 {len(conflicts)} 个冲突，已中止")
-        return None, conflicts, None
+            return None, conflicts, None, None
+        return None, conflicts, None, report
 
     books_data = parsed["books"]
     reservations_data = parsed["active_reservations"]
@@ -1460,9 +1588,7 @@ def import_snapshot(snapshot_data, dry_run=False):
     }
 
     if dry_run:
-        _log("import_snapshot_dry_run", True,
-             detail=f"DRY-RUN 快照导入校验通过，可导入：{counts}")
-        return counts, None, None
+        return counts, None, None, report
 
     with store._lock:
         backup = store.backup_all()
@@ -1517,8 +1643,8 @@ def import_snapshot(snapshot_data, dry_run=False):
             return None, [{
                 "type": "snapshot_import_error",
                 "message": f"导入过程出错，已完整回滚所有数据: {str(e)}",
-            }], None
+            }], None, None
 
     _log("import_snapshot", True,
          detail=f"快照导入成功：{counts}")
-    return counts, None, None
+    return counts, None, None, None

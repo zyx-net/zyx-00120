@@ -1,46 +1,46 @@
-[
-  {
-    "reservation_id": "f-res-1",
-    "book_id": "FINAL-B001",
-    "reader_id": "R-FIN-001",
-    "status": "available",
-    "created_at": "2026-06-19T07:00:00+00:00",
-    "available_at": "2026-06-19T07:00:00+00:00",
-    "expire_at": "2026-06-20T07:00:00+00:00",
-    "borrowed_at": null,
-    "returned_at": null
-  },
-  {
-    "reservation_id": "f-res-2",
-    "book_id": "FINAL-B001",
-    "reader_id": "R-FIN-002",
-    "status": "waiting",
-    "created_at": "2026-06-19T08:00:00+00:00",
-    "available_at": null,
-    "expire_at": null,
-    "borrowed_at": null,
-    "returned_at": null
-  },
-  {
-    "reservation_id": "f-res-3",
-    "book_id": "FINAL-B001",
-    "reader_id": "R-FIN-003",
-    "status": "waiting",
-    "created_at": "2026-06-19T09:00:00+00:00",
-    "available_at": null,
-    "expire_at": null,
-    "borrowed_at": null,
-    "returned_at": null
-  },
-  {
-    "reservation_id": "f-res-4",
-    "book_id": "FINAL-B002",
-    "reader_id": "R-FIN-004",
-    "status": "borrowed",
-    "created_at": "2026-06-18T10:00:00+00:00",
-    "available_at": "2026-06-18T10:00:00+00:00",
-    "expire_at": null,
-    "borrowed_at": "2026-06-18T11:00:00+00:00",
-    "returned_at": null
-  }
+﻿[
+    {
+        "available_at":  "2026-06-19T07:00:00+00:00",
+        "book_id":  "FINAL-B001",
+        "borrowed_at":  null,
+        "created_at":  "2026-06-19T07:00:00+00:00",
+        "expire_at":  "2026-06-20T07:00:00+00:00",
+        "reader_id":  "R-FIN-001",
+        "reservation_id":  "f-res-1",
+        "returned_at":  null,
+        "status":  "available"
+    },
+    {
+        "available_at":  null,
+        "book_id":  "FINAL-B001",
+        "borrowed_at":  null,
+        "created_at":  "2026-06-19T08:00:00+00:00",
+        "expire_at":  null,
+        "reader_id":  "R-FIN-002",
+        "reservation_id":  "f-res-2",
+        "returned_at":  null,
+        "status":  "waiting"
+    },
+    {
+        "available_at":  null,
+        "book_id":  "FINAL-B001",
+        "borrowed_at":  null,
+        "created_at":  "2026-06-19T09:00:00+00:00",
+        "expire_at":  null,
+        "reader_id":  "R-FIN-003",
+        "reservation_id":  "f-res-3",
+        "returned_at":  null,
+        "status":  "waiting"
+    },
+    {
+        "available_at":  "2026-06-18T10:00:00+00:00",
+        "book_id":  "FINAL-B002",
+        "borrowed_at":  "2026-06-18T11:00:00+00:00",
+        "created_at":  "2026-06-18T10:00:00+00:00",
+        "expire_at":  null,
+        "reader_id":  "R-FIN-004",
+        "reservation_id":  "f-res-4",
+        "returned_at":  null,
+        "status":  "borrowed"
+    }
 ]

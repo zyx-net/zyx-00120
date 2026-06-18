@@ -1,0 +1,322 @@
+﻿{
+    "data":  {
+                 "can_import":  true,
+                 "details":  {
+                                 "active_reservations":  {
+                                                             "conflicts":  [
+
+                                                                           ],
+                                                             "format_errors":  [
+
+                                                                               ],
+                                                             "issues":  [
+
+                                                                        ],
+                                                             "missing_dependencies":  [
+
+                                                                                      ],
+                                                             "will_add":  [
+                                                                              {
+                                                                                  "book_id":  "FINAL-B001",
+                                                                                  "created_at":  "2026-06-19T07:00:00+00:00",
+                                                                                  "reader_id":  "R-FIN-001",
+                                                                                  "reservation_id":  "f-res-1",
+                                                                                  "status":  "available"
+                                                                              },
+                                                                              {
+                                                                                  "book_id":  "FINAL-B001",
+                                                                                  "created_at":  "2026-06-19T08:00:00+00:00",
+                                                                                  "reader_id":  "R-FIN-002",
+                                                                                  "reservation_id":  "f-res-2",
+                                                                                  "status":  "waiting"
+                                                                              },
+                                                                              {
+                                                                                  "book_id":  "FINAL-B001",
+                                                                                  "created_at":  "2026-06-19T09:00:00+00:00",
+                                                                                  "reader_id":  "R-FIN-003",
+                                                                                  "reservation_id":  "f-res-3",
+                                                                                  "status":  "waiting"
+                                                                              },
+                                                                              {
+                                                                                  "book_id":  "FINAL-B002",
+                                                                                  "created_at":  "2026-06-18T10:00:00+00:00",
+                                                                                  "reader_id":  "R-FIN-004",
+                                                                                  "reservation_id":  "f-res-4",
+                                                                                  "status":  "borrowed"
+                                                                              }
+                                                                          ],
+                                                             "will_block":  [
+
+                                                                            ],
+                                                             "will_skip":  [
+
+                                                                           ]
+                                                         },
+                                 "blacklist":  {
+                                                   "conflicts":  [
+
+                                                                 ],
+                                                   "format_errors":  [
+
+                                                                     ],
+                                                   "issues":  [
+
+                                                              ],
+                                                   "missing_dependencies":  [
+
+                                                                            ],
+                                                   "will_add":  [
+                                                                    {
+                                                                        "added_at":  "2026-06-18T00:00:00+00:00",
+                                                                        "reader_id":  "R-FIN-BL1",
+                                                                        "reason":  "???????1"
+                                                                    },
+                                                                    {
+                                                                        "added_at":  "2026-06-19T00:00:00+00:00",
+                                                                        "reader_id":  "R-FIN-BL2",
+                                                                        "reason":  "???????2"
+                                                                    }
+                                                                ],
+                                                   "will_block":  [
+
+                                                                  ],
+                                                   "will_skip":  [
+
+                                                                 ]
+                                               },
+                                 "books":  {
+                                               "conflicts":  [
+
+                                                             ],
+                                               "format_errors":  [
+
+                                                                 ],
+                                               "issues":  [
+
+                                                          ],
+                                               "missing_dependencies":  [
+
+                                                                        ],
+                                               "will_add":  [
+                                                                {
+                                                                    "book_id":  "FINAL-B001",
+                                                                    "borrow_days":  30,
+                                                                    "retain_hours":  24,
+                                                                    "title":  "?????1",
+                                                                    "total_copies":  3
+                                                                },
+                                                                {
+                                                                    "book_id":  "FINAL-B002",
+                                                                    "borrow_days":  14,
+                                                                    "retain_hours":  12,
+                                                                    "title":  "?????2",
+                                                                    "total_copies":  1
+                                                                }
+                                                            ],
+                                               "will_block":  [
+
+                                                              ],
+                                               "will_skip":  [
+
+                                                             ]
+                                           },
+                                 "logs":  {
+                                              "conflicts":  [
+
+                                                            ],
+                                              "format_errors":  [
+
+                                                                ],
+                                              "issues":  [
+
+                                                         ],
+                                              "missing_dependencies":  [
+
+                                                                       ],
+                                              "will_add":  [
+                                                               {
+                                                                   "action":  "add_book",
+                                                                   "book_id":  "FINAL-B001",
+                                                                   "log_id":  "f-log-1",
+                                                                   "reader_id":  null,
+                                                                   "timestamp":  "2026-06-18T09:00:00+00:00"
+                                                               },
+                                                               {
+                                                                   "action":  "add_book",
+                                                                   "book_id":  "FINAL-B002",
+                                                                   "log_id":  "f-log-2",
+                                                                   "reader_id":  null,
+                                                                   "timestamp":  "2026-06-18T09:00:01+00:00"
+                                                               },
+                                                               {
+                                                                   "action":  "blacklist_add",
+                                                                   "book_id":  null,
+                                                                   "log_id":  "f-log-8",
+                                                                   "reader_id":  "R-FIN-BL1",
+                                                                   "timestamp":  "2026-06-18T20:00:00+00:00"
+                                                               },
+                                                               {
+                                                                   "action":  "blacklist_add",
+                                                                   "book_id":  null,
+                                                                   "log_id":  "f-log-9",
+                                                                   "reader_id":  "R-FIN-BL2",
+                                                                   "timestamp":  "2026-06-18T20:00:01+00:00"
+                                                               },
+                                                               {
+                                                                   "action":  "reserve",
+                                                                   "book_id":  "FINAL-B002",
+                                                                   "log_id":  "f-log-3",
+                                                                   "reader_id":  "R-FIN-004",
+                                                                   "timestamp":  "2026-06-18T22:00:00+00:00"
+                                                               },
+                                                               {
+                                                                   "action":  "import_snapshot",
+                                                                   "book_id":  null,
+                                                                   "log_id":  "328dee9a-8347-43a4-9e71-6e99248889e5",
+                                                                   "reader_id":  null,
+                                                                   "timestamp":  "2026-06-18T22:47:05.301922+00:00"
+                                                               },
+                                                               {
+                                                                   "action":  "checkout",
+                                                                   "book_id":  "FINAL-B002",
+                                                                   "log_id":  "f-log-4",
+                                                                   "reader_id":  "R-FIN-004",
+                                                                   "timestamp":  "2026-06-18T23:00:00+00:00"
+                                                               },
+                                                               {
+                                                                   "action":  "reserve",
+                                                                   "book_id":  "FINAL-B001",
+                                                                   "log_id":  "f-log-5",
+                                                                   "reader_id":  "R-FIN-001",
+                                                                   "timestamp":  "2026-06-19T07:00:00+00:00"
+                                                               },
+                                                               {
+                                                                   "action":  "reserve",
+                                                                   "book_id":  "FINAL-B001",
+                                                                   "log_id":  "f-log-6",
+                                                                   "reader_id":  "R-FIN-002",
+                                                                   "timestamp":  "2026-06-19T08:00:00+00:00"
+                                                               },
+                                                               {
+                                                                   "action":  "reserve",
+                                                                   "book_id":  "FINAL-B001",
+                                                                   "log_id":  "f-log-7",
+                                                                   "reader_id":  "R-FIN-003",
+                                                                   "timestamp":  "2026-06-19T09:00:00+00:00"
+                                                               }
+                                                           ],
+                                              "will_block":  [
+
+                                                             ],
+                                              "will_skip":  [
+
+                                                            ]
+                                          }
+                             },
+                 "dry_run":  true,
+                 "summary":  {
+                                 "availability_check":  {
+                                                            "FINAL-B001":  {
+                                                                               "available_copies":  2,
+                                                                               "borrowed":  0,
+                                                                               "has_overflow":  false,
+                                                                               "to_pick":  1,
+                                                                               "total_copies":  3,
+                                                                               "waiting":  2
+                                                                           },
+                                                            "FINAL-B002":  {
+                                                                               "available_copies":  0,
+                                                                               "borrowed":  1,
+                                                                               "has_overflow":  false,
+                                                                               "to_pick":  0,
+                                                                               "total_copies":  1,
+                                                                               "waiting":  0
+                                                                           }
+                                                        },
+                                 "breakdown":  {
+                                                   "active_reservations":  {
+                                                                               "conflicts":  0,
+                                                                               "format_errors":  0,
+                                                                               "issues":  0,
+                                                                               "missing_dependencies":  0,
+                                                                               "will_add":  4,
+                                                                               "will_block":  0,
+                                                                               "will_skip":  0
+                                                                           },
+                                                   "blacklist":  {
+                                                                     "conflicts":  0,
+                                                                     "format_errors":  0,
+                                                                     "issues":  0,
+                                                                     "missing_dependencies":  0,
+                                                                     "will_add":  2,
+                                                                     "will_block":  0,
+                                                                     "will_skip":  0
+                                                                 },
+                                                   "books":  {
+                                                                 "conflicts":  0,
+                                                                 "format_errors":  0,
+                                                                 "issues":  0,
+                                                                 "missing_dependencies":  0,
+                                                                 "will_add":  2,
+                                                                 "will_block":  0,
+                                                                 "will_skip":  0
+                                                             },
+                                                   "logs":  {
+                                                                "conflicts":  0,
+                                                                "format_errors":  0,
+                                                                "issues":  0,
+                                                                "missing_dependencies":  0,
+                                                                "will_add":  10,
+                                                                "will_block":  0,
+                                                                "will_skip":  0
+                                                            }
+                                               },
+                                 "message":  "预检通过，可以安全导入",
+                                 "queue_order_check":  {
+                                                           "FINAL-B001":  {
+                                                                              "is_ordered_by_created_at":  true,
+                                                                              "order_by_created_at":  [
+                                                                                                          {
+                                                                                                              "created_at":  "2026-06-19T07:00:00+00:00",
+                                                                                                              "reader_id":  "R-FIN-001",
+                                                                                                              "status":  "available"
+                                                                                                          },
+                                                                                                          {
+                                                                                                              "created_at":  "2026-06-19T08:00:00+00:00",
+                                                                                                              "reader_id":  "R-FIN-002",
+                                                                                                              "status":  "waiting"
+                                                                                                          },
+                                                                                                          {
+                                                                                                              "created_at":  "2026-06-19T09:00:00+00:00",
+                                                                                                              "reader_id":  "R-FIN-003",
+                                                                                                              "status":  "waiting"
+                                                                                                          }
+                                                                                                      ],
+                                                                              "total_active":  3,
+                                                                              "waiting_count":  2
+                                                                          },
+                                                           "FINAL-B002":  {
+                                                                              "is_ordered_by_created_at":  true,
+                                                                              "order_by_created_at":  [
+                                                                                                          {
+                                                                                                              "created_at":  "2026-06-18T10:00:00+00:00",
+                                                                                                              "reader_id":  "R-FIN-004",
+                                                                                                              "status":  "borrowed"
+                                                                                                          }
+                                                                                                      ],
+                                                                              "total_active":  1,
+                                                                              "waiting_count":  0
+                                                                          }
+                                                       },
+                                 "status":  "ready",
+                                 "total_conflicts":  0,
+                                 "total_format_errors":  0,
+                                 "total_log_issues":  0,
+                                 "total_missing_dependencies":  0,
+                                 "total_will_add":  18,
+                                 "total_will_block":  0,
+                                 "total_will_skip":  0
+                             }
+             },
+    "ok":  true
+}

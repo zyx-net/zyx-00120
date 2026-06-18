@@ -1,0 +1,10 @@
+﻿{
+    "dry_run":  false,
+    "imported_counts":  {
+                            "active_reservations":  0,
+                            "blacklist":  0,
+                            "books":  1,
+                            "logs":  1
+                        },
+    "ok":  true
+}

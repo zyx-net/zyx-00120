@@ -1,16 +1,16 @@
-[
-  {
-    "book_id": "FINAL-B001",
-    "title": "最终测试书1",
-    "total_copies": 3,
-    "borrow_days": 30,
-    "retain_hours": 24
-  },
-  {
-    "book_id": "FINAL-B002",
-    "title": "最终测试书2",
-    "total_copies": 1,
-    "borrow_days": 14,
-    "retain_hours": 12
-  }
+﻿[
+    {
+        "book_id":  "FINAL-B001",
+        "borrow_days":  30,
+        "retain_hours":  24,
+        "title":  "最终测试书1",
+        "total_copies":  3
+    },
+    {
+        "book_id":  "FINAL-B002",
+        "borrow_days":  14,
+        "retain_hours":  12,
+        "title":  "最终测试书2",
+        "total_copies":  1
+    }
 ]

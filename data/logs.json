@@ -1,97 +1,88 @@
-[
-  {
-    "log_id": "90034b8d-7913-4915-8e31-43a0e869c7c3",
-    "timestamp": "2026-06-18T22:05:07.436063+00:00",
-    "action": "precheck_snapshot",
-    "reader_id": null,
-    "book_id": null,
-    "detail": "预检完成：状态=ready, 可添加=17, 冲突=0, 缺依赖=0, 格式错=0, 日志问题=0",
-    "success": true
-  },
-  {
-    "log_id": "f-log-1",
-    "timestamp": "2026-06-18T09:00:00+00:00",
-    "action": "add_book",
-    "book_id": "FINAL-B001",
-    "success": true,
-    "detail": "创建书目"
-  },
-  {
-    "log_id": "f-log-2",
-    "timestamp": "2026-06-18T09:00:01+00:00",
-    "action": "add_book",
-    "book_id": "FINAL-B002",
-    "success": true,
-    "detail": "创建书目"
-  },
-  {
-    "log_id": "f-log-8",
-    "timestamp": "2026-06-18T20:00:00+00:00",
-    "action": "blacklist_add",
-    "reader_id": "R-FIN-BL1",
-    "success": true,
-    "detail": "加入黑名单"
-  },
-  {
-    "log_id": "f-log-9",
-    "timestamp": "2026-06-18T20:00:01+00:00",
-    "action": "blacklist_add",
-    "reader_id": "R-FIN-BL2",
-    "success": true,
-    "detail": "加入黑名单"
-  },
-  {
-    "log_id": "f-log-3",
-    "timestamp": "2026-06-18T22:00:00+00:00",
-    "action": "reserve",
-    "book_id": "FINAL-B002",
-    "reader_id": "R-FIN-004",
-    "success": true,
-    "detail": "预约"
-  },
-  {
-    "log_id": "f-log-4",
-    "timestamp": "2026-06-18T23:00:00+00:00",
-    "action": "checkout",
-    "book_id": "FINAL-B002",
-    "reader_id": "R-FIN-004",
-    "success": true,
-    "detail": "借出"
-  },
-  {
-    "log_id": "f-log-5",
-    "timestamp": "2026-06-19T07:00:00+00:00",
-    "action": "reserve",
-    "book_id": "FINAL-B001",
-    "reader_id": "R-FIN-001",
-    "success": true,
-    "detail": "预约并立即待取"
-  },
-  {
-    "log_id": "f-log-6",
-    "timestamp": "2026-06-19T08:00:00+00:00",
-    "action": "reserve",
-    "book_id": "FINAL-B001",
-    "reader_id": "R-FIN-002",
-    "success": true,
-    "detail": "排队等待"
-  },
-  {
-    "log_id": "f-log-7",
-    "timestamp": "2026-06-19T09:00:00+00:00",
-    "action": "reserve",
-    "book_id": "FINAL-B001",
-    "reader_id": "R-FIN-003",
-    "success": true,
-    "detail": "排队等待"
-  },
-  {
-    "log_id": "2f492b46-ae8f-4eef-9a74-f00e78ae3ba4",
-    "timestamp": "2026-06-18T22:05:07.444476+00:00",
-    "action": "import_snapshot",
-    "reader_id": null,
-    "book_id": null,
-    "detail": "快照导入成功：{'books': 2, 'active_reservations': 4, 'blacklist': 2, 'logs': 9}",
-    "success": true
-  }
+﻿[
+    {
+        "action":  "add_book",
+        "book_id":  "FINAL-B001",
+        "detail":  "创建书目",
+        "log_id":  "f-log-1",
+        "success":  true,
+        "timestamp":  "2026-06-18T09:00:00+00:00"
+    },
+    {
+        "action":  "add_book",
+        "book_id":  "FINAL-B002",
+        "detail":  "创建书目",
+        "log_id":  "f-log-2",
+        "success":  true,
+        "timestamp":  "2026-06-18T09:00:01+00:00"
+    },
+    {
+        "action":  "blacklist_add",
+        "detail":  "加入黑名单",
+        "log_id":  "f-log-8",
+        "reader_id":  "R-FIN-BL1",
+        "success":  true,
+        "timestamp":  "2026-06-18T20:00:00+00:00"
+    },
+    {
+        "action":  "blacklist_add",
+        "detail":  "加入黑名单",
+        "log_id":  "f-log-9",
+        "reader_id":  "R-FIN-BL2",
+        "success":  true,
+        "timestamp":  "2026-06-18T20:00:01+00:00"
+    },
+    {
+        "action":  "reserve",
+        "book_id":  "FINAL-B002",
+        "detail":  "预约",
+        "log_id":  "f-log-3",
+        "reader_id":  "R-FIN-004",
+        "success":  true,
+        "timestamp":  "2026-06-18T22:00:00+00:00"
+    },
+    {
+        "action":  "import_snapshot",
+        "book_id":  null,
+        "detail":  "快照导入成功：{\u0027books\u0027: 2, \u0027active_reservations\u0027: 4, \u0027blacklist\u0027: 2, \u0027logs\u0027: 9}",
+        "log_id":  "328dee9a-8347-43a4-9e71-6e99248889e5",
+        "reader_id":  null,
+        "success":  true,
+        "timestamp":  "2026-06-18T22:47:05.301922+00:00"
+    },
+    {
+        "action":  "checkout",
+        "book_id":  "FINAL-B002",
+        "detail":  "借出",
+        "log_id":  "f-log-4",
+        "reader_id":  "R-FIN-004",
+        "success":  true,
+        "timestamp":  "2026-06-18T23:00:00+00:00"
+    },
+    {
+        "action":  "reserve",
+        "book_id":  "FINAL-B001",
+        "detail":  "预约并立即待取",
+        "log_id":  "f-log-5",
+        "reader_id":  "R-FIN-001",
+        "success":  true,
+        "timestamp":  "2026-06-19T07:00:00+00:00"
+    },
+    {
+        "action":  "reserve",
+        "book_id":  "FINAL-B001",
+        "detail":  "排队等待",
+        "log_id":  "f-log-6",
+        "reader_id":  "R-FIN-002",
+        "success":  true,
+        "timestamp":  "2026-06-19T08:00:00+00:00"
+    },
+    {
+        "action":  "reserve",
+        "book_id":  "FINAL-B001",
+        "detail":  "排队等待",
+        "log_id":  "f-log-7",
+        "reader_id":  "R-FIN-003",
+        "success":  true,
+        "timestamp":  "2026-06-19T09:00:00+00:00"
+    }
 ]

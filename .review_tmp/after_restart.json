@@ -1,0 +1,87 @@
+﻿{
+    "queue":  [
+                  {
+                      "available_at":  "2026-06-19T07:00:00+00:00",
+                      "book_id":  "FINAL-B001",
+                      "borrowed_at":  null,
+                      "created_at":  "2026-06-19T07:00:00+00:00",
+                      "expire_at":  "2026-06-20T07:00:00+00:00",
+                      "reader_id":  "R-FIN-001",
+                      "reservation_id":  "f-res-1",
+                      "returned_at":  null,
+                      "status":  "available"
+                  },
+                  {
+                      "available_at":  null,
+                      "book_id":  "FINAL-B001",
+                      "borrowed_at":  null,
+                      "created_at":  "2026-06-19T08:00:00+00:00",
+                      "expire_at":  null,
+                      "position":  1,
+                      "reader_id":  "R-FIN-002",
+                      "reservation_id":  "f-res-2",
+                      "returned_at":  null,
+                      "status":  "waiting"
+                  },
+                  {
+                      "available_at":  null,
+                      "book_id":  "FINAL-B001",
+                      "borrowed_at":  null,
+                      "created_at":  "2026-06-19T09:00:00+00:00",
+                      "expire_at":  null,
+                      "position":  2,
+                      "reader_id":  "R-FIN-003",
+                      "reservation_id":  "f-res-3",
+                      "returned_at":  null,
+                      "status":  "waiting"
+                  }
+              ],
+    "book":  {
+                 "book_id":  "FINAL-B001",
+                 "borrow_days":  30,
+                 "retain_hours":  24,
+                 "title":  "?????1",
+                 "total_copies":  3
+             },
+    "log_ids":  [
+                    "f-log-7",
+                    "f-log-6",
+                    "f-log-5",
+                    "f-log-1"
+                ],
+    "blacklist":  [
+                      {
+                          "added_at":  "2026-06-18T00:00:00+00:00",
+                          "reader_id":  "R-FIN-BL1",
+                          "reason":  "???????1"
+                      },
+                      {
+                          "added_at":  "2026-06-19T00:00:00+00:00",
+                          "reader_id":  "R-FIN-BL2",
+                          "reason":  "???????2"
+                      }
+                  ],
+    "all_books":  [
+                      {
+                          "book_id":  "FINAL-B001",
+                          "borrow_days":  30,
+                          "retain_hours":  24,
+                          "title":  "?????1",
+                          "total_copies":  3
+                      },
+                      {
+                          "book_id":  "FINAL-B002",
+                          "borrow_days":  14,
+                          "retain_hours":  12,
+                          "title":  "?????2",
+                          "total_copies":  1
+                      },
+                      {
+                          "book_id":  "FINAL-B003",
+                          "borrow_days":  21,
+                          "retain_hours":  6,
+                          "title":  "???????",
+                          "total_copies":  2
+                      }
+                  ]
+}

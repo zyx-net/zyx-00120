@@ -1,0 +1,36 @@
+﻿{
+    "version":  "2.0",
+    "type":  "full_snapshot",
+    "export_time":  "2026-06-20T00:00:00+00:00",
+    "counts":  {
+                   "books":  1,
+                   "active_reservations":  0,
+                   "blacklist":  0,
+                   "logs":  1
+               },
+    "books":  [
+                  {
+                      "book_id":  "FINAL-B003",
+                      "title":  "切换配置新增书",
+                      "total_copies":  2,
+                      "borrow_days":  21,
+                      "retain_hours":  6
+                  }
+              ],
+    "active_reservations":  [
+
+                            ],
+    "blacklist":  [
+
+                  ],
+    "logs":  [
+                 {
+                     "log_id":  "cfg-log-1",
+                     "timestamp":  "2026-06-20T00:00:00+00:00",
+                     "action":  "add_book",
+                     "book_id":  "FINAL-B003",
+                     "success":  true,
+                     "detail":  "新增书目配置切换验证"
+                 }
+             ]
+}

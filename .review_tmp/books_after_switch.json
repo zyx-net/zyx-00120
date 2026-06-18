@@ -1,0 +1,26 @@
+﻿{
+    "data":  [
+                 {
+                     "book_id":  "FINAL-B001",
+                     "borrow_days":  30,
+                     "retain_hours":  24,
+                     "title":  "?????1",
+                     "total_copies":  3
+                 },
+                 {
+                     "book_id":  "FINAL-B002",
+                     "borrow_days":  14,
+                     "retain_hours":  12,
+                     "title":  "?????2",
+                     "total_copies":  1
+                 },
+                 {
+                     "book_id":  "FINAL-B003",
+                     "borrow_days":  21,
+                     "retain_hours":  6,
+                     "title":  "???????",
+                     "total_copies":  2
+                 }
+             ],
+    "ok":  true
+}

@@ -65,7 +65,15 @@ python demo5.py
 python demo6.py
 ```
 
-快照迁移扎实版回归测试（覆盖日志混入字符串/缺字段/类型错/时间乱序/引用不存在/重复log_id + 预检dry-run正式导入口径一致 + 导出预检导入链路 + 重启后重复提交 + 配置切换后重跑 + 混合有效无效日志与预约黑名单冲突同时出现 + 队列顺序/可借状态/日志过滤/黑名单不漂移）：
+快照迁移扎实版回归测试（覆盖：
+- 日志异常：字符串混入 / 缺字段 / 类型错 / 时间乱序 / 引用不存在书目 / 重复 log_id
+- 三方口径一致：预检 / dry-run / 正式导入，冲突判断 + summary 统计 + 日志过滤 完全一致
+- 文件完整性：dry-run / 预检 后 data/ 下所有 JSON 文件的 SHA256 / 大小 / 修改时间 完全不变
+- 完整链路：导出 → 预检 → dry-run → 正式导入 → 重启验证
+- 队列顺序 / 可借状态 / 日志过滤 / 黑名单 四项一致性深度核对
+- 服务重启后重复提交：冲突检测有效，回滚完整
+- 配置切换后重跑：新增书目可正常导入，原有数据不被影响
+- 混合场景：有效/无效日志 + 预约/黑名单冲突 同时出现，口径一致）：
 
 ```bash
 python demo7.py
@@ -625,9 +633,17 @@ curl -X POST http://127.0.0.1:5000/api/snapshot/import?dry_run=true \
     "blacklist": 2,
     "logs": 25
   },
-  "dry_run": true
+  "dry_run": true,
+  "report": {
+    "dry_run": true,
+    "can_import": true,
+    "summary": { ... },
+    "details": { ... }
+  }
 }
 ```
+
+> **注意**：`report` 字段结构与 `POST /api/snapshot/precheck` 的响应完全一致，dry-run 与预检共用同一套校验逻辑，口径 100% 相同。
 
 #### 请求示例 - 正式导入
 
@@ -679,9 +695,17 @@ curl -X POST http://127.0.0.1:5000/api/snapshot/import?dry_run=false \
       "message": "目标环境已存在书目 B001"
     }
   ],
-  "dry_run": false
+  "dry_run": false,
+  "report": {
+    "dry_run": false,
+    "can_import": false,
+    "summary": { ... },
+    "details": { ... }
+  }
 }
 ```
+
+> **注意**：冲突响应中也包含 `report` 字段，结构与预检报告完全一致。格式错误响应（HTTP 400）同理，也会返回完整的 `report`。
 
 #### 冲突类型说明
 
@@ -817,7 +841,10 @@ python demo5.py
 **核心特性**：
 - **复用校验逻辑**：与正式导入共用同一套校验和冲突判断函数，口径完全一致，绝无"dry-run 通过但正式导入马上失败"的情况
 - **四块分类**：书目、活跃预约、黑名单、日志，每块独立统计
-- **四类明细**：will_add（将新增）、conflicts（冲突）、missing_dependencies（缺依赖）、format_errors（格式错误）
+- **三类明细**：
+  - **will_add（将新增）**：格式正确且无冲突，会被导入的记录
+  - **will_skip（将跳过）**：因冲突/依赖缺失等原因不会被导入的记录
+  - **will_block（将拦下）**：因格式错误被拦下的记录
 - **可读摘要**：summary 包含状态、消息、总数、分类统计
 - **队列顺序核对**：按 `created_at` 展示每本书的队列顺序，方便核对
 - **可借状态核对**：计算每本书的借出/待取/等待/可借数量，辅助验证状态一致性
@@ -846,14 +873,17 @@ curl -X POST http://127.0.0.1:5000/api/snapshot/precheck \
       "status": "ready",
       "message": "预检通过，可以安全导入",
       "total_will_add": 10,
+      "total_will_skip": 0,
+      "total_will_block": 0,
       "total_conflicts": 0,
       "total_missing_dependencies": 0,
       "total_format_errors": 0,
+      "total_log_issues": 0,
       "breakdown": {
-        "books": { "will_add": 2, "conflicts": 0, "missing_dependencies": 0, "format_errors": 0 },
-        "active_reservations": { "will_add": 4, "conflicts": 0, "missing_dependencies": 0, "format_errors": 0 },
-        "blacklist": { "will_add": 1, "conflicts": 0, "missing_dependencies": 0, "format_errors": 0 },
-        "logs": { "will_add": 3, "conflicts": 0, "missing_dependencies": 0, "format_errors": 0 }
+        "books": { "will_add": 2, "will_skip": 0, "will_block": 0, "conflicts": 0, "missing_dependencies": 0, "format_errors": 0, "issues": 0 },
+        "active_reservations": { "will_add": 4, "will_skip": 0, "will_block": 0, "conflicts": 0, "missing_dependencies": 0, "format_errors": 0, "issues": 0 },
+        "blacklist": { "will_add": 1, "will_skip": 0, "will_block": 0, "conflicts": 0, "missing_dependencies": 0, "format_errors": 0, "issues": 0 },
+        "logs": { "will_add": 3, "will_skip": 0, "will_block": 0, "conflicts": 0, "missing_dependencies": 0, "format_errors": 0, "issues": 0 }
       },
       "queue_order_check": {
         "B001": {
@@ -882,33 +912,45 @@ curl -X POST http://127.0.0.1:5000/api/snapshot/precheck \
         "will_add": [
           {"book_id": "B001", "title": "Python编程", "total_copies": 5, "borrow_days": 30, "retain_hours": 24}
         ],
+        "will_skip": [],
+        "will_block": [],
         "conflicts": [],
         "missing_dependencies": [],
-        "format_errors": []
+        "format_errors": [],
+        "issues": []
       },
       "active_reservations": {
         "will_add": [
           {"reservation_id": "uuid-1", "book_id": "B001", "reader_id": "R001", "status": "borrowed", "created_at": "..."}
         ],
+        "will_skip": [],
+        "will_block": [],
         "conflicts": [],
         "missing_dependencies": [],
-        "format_errors": []
+        "format_errors": [],
+        "issues": []
       },
       "blacklist": {
         "will_add": [
           {"reader_id": "BLACK-001", "reason": "逾期未还", "added_at": "..."}
         ],
+        "will_skip": [],
+        "will_block": [],
         "conflicts": [],
         "missing_dependencies": [],
-        "format_errors": []
+        "format_errors": [],
+        "issues": []
       },
       "logs": {
         "will_add": [
           {"log_id": "log-1", "action": "reserve", "timestamp": "...", "book_id": "B001", "reader_id": "R001"}
         ],
+        "will_skip": [],
+        "will_block": [],
         "conflicts": [],
         "missing_dependencies": [],
-        "format_errors": []
+        "format_errors": [],
+        "issues": []
       }
     }
   }

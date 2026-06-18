@@ -5,6 +5,7 @@ import sys
 import time
 import urllib.request
 import urllib.error
+import hashlib
 
 BASE = "http://127.0.0.1:5000"
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -143,22 +144,100 @@ def print_report_summary(report):
     print(f"    消息: {s['message']}")
     print(f"    可导入: {report['can_import']}")
     print(f"    将新增: {s['total_will_add']} 条")
+    print(f"    将跳过: {s.get('total_will_skip', 0)} 条")
+    print(f"    将拦下: {s.get('total_will_block', 0)} 条")
     print(f"    冲突: {s['total_conflicts']} 条")
     print(f"    缺依赖: {s['total_missing_dependencies']} 条")
     print(f"    格式错误: {s['total_format_errors']} 条")
     print(f"    日志问题: {s.get('total_log_issues', 0)} 条")
     for sec, stats in s["breakdown"].items():
-        print(f"    [{sec}] 新增={stats['will_add']}, 冲突={stats['conflicts']}, "
+        print(f"    [{sec}] 新增={stats['will_add']}, 跳过={stats.get('will_skip', 0)}, "
+              f"拦下={stats.get('will_block', 0)}, 冲突={stats['conflicts']}, "
               f"缺依赖={stats['missing_dependencies']}, 格式错={stats['format_errors']}, "
               f"问题={stats.get('issues', 0)}")
 
+
+def get_data_file_fingerprint():
+    fingerprint = {}
+    for name in ["books", "reservations", "blacklist", "logs"]:
+        p = os.path.join(DATA_DIR, f"{name}.json")
+        if os.path.exists(p):
+            with open(p, "rb") as f:
+                content = f.read()
+            fingerprint[name] = {
+                "exists": True,
+                "size": len(content),
+                "mtime": os.path.getmtime(p),
+                "sha256": hashlib.sha256(content).hexdigest(),
+            }
+        else:
+            fingerprint[name] = {
+                "exists": False,
+                "size": 0,
+                "mtime": None,
+                "sha256": None,
+            }
+    return fingerprint
+
+
+def assert_data_files_unchanged(before, after, label=""):
+    all_ok = True
+    for name in ["books", "reservations", "blacklist", "logs"]:
+        b = before[name]
+        a = after[name]
+        if b["exists"] != a["exists"]:
+            print(f"  [FAIL] {label}: {name}.json 存在性变化: {b['exists']} -> {a['exists']}")
+            all_ok = False
+        elif b["exists"]:
+            if b["sha256"] != a["sha256"]:
+                print(f"  [FAIL] {label}: {name}.json SHA256 变化")
+                print(f"    之前: {b['sha256'][:16]}... ({b['size']} bytes)")
+                print(f"    之后: {a['sha256'][:16]}... ({a['size']} bytes)")
+                all_ok = False
+    if all_ok:
+        print(f"  [PASS] {label}: data/ 下所有 JSON 文件完全未变")
+    else:
+        sys.exit(1)
+
+
+def assert_report_consistency(pre_report, dry_report, label=""):
+    pre_s = pre_report["summary"]
+    dry_s = dry_report["summary"]
+    assert_true(pre_report["can_import"] == dry_report["can_import"],
+                f"{label}: can_import 一致")
+    assert_true(pre_s["status"] == dry_s["status"],
+                f"{label}: status 一致 ({pre_s['status']} == {dry_s['status']})")
+    assert_true(pre_s["total_will_add"] == dry_s["total_will_add"],
+                f"{label}: total_will_add 一致 ({pre_s['total_will_add']} == {dry_s['total_will_add']})")
+    assert_true(pre_s["total_conflicts"] == dry_s["total_conflicts"],
+                f"{label}: total_conflicts 一致")
+    assert_true(pre_s["total_missing_dependencies"] == dry_s["total_missing_dependencies"],
+                f"{label}: total_missing_dependencies 一致")
+    assert_true(pre_s["total_format_errors"] == dry_s["total_format_errors"],
+                f"{label}: total_format_errors 一致")
+    assert_true(pre_s.get("total_log_issues", 0) == dry_s.get("total_log_issues", 0),
+                f"{label}: total_log_issues 一致")
+
+    for sec in ["books", "active_reservations", "blacklist", "logs"]:
+        pb = pre_s["breakdown"][sec]
+        db = dry_s["breakdown"][sec]
+        assert_true(pb["will_add"] == db["will_add"],
+                    f"{label}: [{sec}] will_add 一致")
+        assert_true(pb["conflicts"] == db["conflicts"],
+                    f"{label}: [{sec}] conflicts 一致")
+        assert_true(pb["format_errors"] == db["format_errors"],
+                    f"{label}: [{sec}] format_errors 一致")
+
+    print(f"  [PASS] {label}: 预检与 dry-run 报告口径完全一致")
 
 if __name__ == "__main__":
     clear_data()
     server_proc = start_server()
 
     try:
-        section("场景 1：日志混入字符串、缺字段、字段类型不对 - 预检不 500，返回明细")
+        section("场景 1：日志混入字符串、缺字段、字段类型不对 - 预检不 500，返回明细 + 不落库")
+
+        fp_before = get_data_file_fingerprint()
 
         bad_logs_snapshot = {
             "version": "2.0",
@@ -187,6 +266,9 @@ if __name__ == "__main__":
         assert_true(s == 200 and r["ok"], "预检接口返回 HTTP 200（绝不 500）")
         report = r["data"]
         print_report_summary(report)
+
+        fp_after = get_data_file_fingerprint()
+        assert_data_files_unchanged(fp_before, fp_after, "场景1 预检后")
 
         assert_true(report["can_import"] is False, "存在格式错误，can_import=False")
         assert_true(report["summary"]["status"] == "format_error", "状态为 format_error")
@@ -243,9 +325,9 @@ if __name__ == "__main__":
             print(f"    原因: {msg}")
             print(f"    阻断其他块? {block_other} | 阻断当前日志块? {block_cur}")
 
-        section("场景 2：预检 vs dry-run vs 正式导入 - 三方口径完全一致")
+        section("场景 2：预检 vs dry-run vs 正式导入 - 三方口径完全一致 + dry-run 不落库")
 
-        subsection("2.1 同一快照预检 + dry-run：结果相同")
+        subsection("2.1 同一快照预检 + dry-run：结果相同 + dry-run 不落库")
 
         consistent_test_snapshot = {
             "version": "2.0",
@@ -262,12 +344,16 @@ if __name__ == "__main__":
             ],
         }
 
+        fp_before_pre = get_data_file_fingerprint()
         pre_r, pre_s = api("POST", "/api/snapshot/precheck", consistent_test_snapshot)
         assert_true(pre_s == 200, "预检 HTTP 200")
         pre_can_import = pre_r["data"]["can_import"]
         pre_log_fe = len(pre_r["data"]["details"]["logs"]["format_errors"])
         print(f"  [预检] can_import={pre_can_import}, 日志格式错误数={pre_log_fe}")
+        fp_after_pre = get_data_file_fingerprint()
+        assert_data_files_unchanged(fp_before_pre, fp_after_pre, "2.1 预检后")
 
+        fp_before_dry = get_data_file_fingerprint()
         dry_r, dry_s = api("POST", "/api/snapshot/import?dry_run=true", consistent_test_snapshot)
         print(f"  [dry-run] HTTP {dry_s}, ok={dry_r.get('ok')}")
         if not dry_r.get("ok"):
@@ -278,6 +364,8 @@ if __name__ == "__main__":
                         print(f"    - {em}")
                 else:
                     print(f"  [dry-run] error: {dry_r['error']}")
+        fp_after_dry = get_data_file_fingerprint()
+        assert_data_files_unchanged(fp_before_dry, fp_after_dry, "2.1 dry-run 后")
 
         assert_true(dry_s == 400,
                     f"存在日志格式错误时 dry-run 返回 HTTP 400，实际 {dry_s}")
@@ -286,7 +374,11 @@ if __name__ == "__main__":
         assert_true(isinstance(dry_r.get("error"), list) and len(dry_r["error"]) > 0,
                     "dry-run 返回 error 列表")
 
-        subsection("2.2 预检有冲突时，dry-run 和正式导入也有相同冲突")
+        assert_true("report" in dry_r, "dry-run 响应中包含 report 字段")
+        dry_report = dry_r["report"]
+        assert_report_consistency(pre_r["data"], dry_report, "2.1 预检与dry-run")
+
+        subsection("2.2 预检有冲突时，dry-run 和正式导入也有相同冲突 + dry-run 不落库")
 
         api("POST", "/api/books",
             {"book_id": "CMP-EXIST-B001", "title": "已存在的书", "total_copies": 2, "borrow_days": 14, "retain_hours": 12})
@@ -303,11 +395,15 @@ if __name__ == "__main__":
             "logs": [],
         }
 
+        fp_pre_before = get_data_file_fingerprint()
         pre_r2, _ = api("POST", "/api/snapshot/precheck", conflict_snapshot)
         pre_conflicts = pre_r2["data"]["details"]["books"]["conflicts"]
         pre_dup_book = [c for c in pre_conflicts if c["type"] == "duplicate_book_id"]
         assert_true(len(pre_dup_book) == 1, "预检检测到 1 个 duplicate_book_id 冲突")
+        fp_pre_after = get_data_file_fingerprint()
+        assert_data_files_unchanged(fp_pre_before, fp_pre_after, "2.2 冲突预检后")
 
+        fp_dry_before = get_data_file_fingerprint()
         dry_r2, dry_s2 = api("POST", "/api/snapshot/import?dry_run=true", conflict_snapshot)
         assert_true(dry_s2 == 409, f"dry-run 冲突返回 HTTP 409，实际 {dry_s2}")
         dry_conflicts = dry_r2.get("conflicts", [])
@@ -315,6 +411,11 @@ if __name__ == "__main__":
         assert_true(len(dry_dup_book) == 1, "dry-run 检测到 1 个 duplicate_book_id 冲突")
         assert_true(dry_dup_book[0]["book_id"] == pre_dup_book[0]["book_id"],
                     f"预检和 dry-run 冲突 book_id 相同: {dry_dup_book[0]['book_id']}")
+        fp_dry_after = get_data_file_fingerprint()
+        assert_data_files_unchanged(fp_dry_before, fp_dry_after, "2.2 冲突 dry-run 后")
+
+        assert_true("report" in dry_r2, "dry-run 冲突响应中包含 report 字段")
+        assert_report_consistency(pre_r2["data"], dry_r2["report"], "2.2 冲突预检与dry-run")
 
         imp_r2, imp_s2 = api("POST", "/api/snapshot/import?dry_run=false", conflict_snapshot)
         assert_true(imp_s2 == 409, f"正式导入冲突返回 HTTP 409，实际 {imp_s2}")
@@ -437,16 +538,38 @@ if __name__ == "__main__":
         server_proc = start_server()
         assert_true(get_book_count() == 0, "清空目标环境后书目数为 0")
 
+        fp_empty = get_data_file_fingerprint()
+        print(f"  [空环境] books.json 存在={fp_empty['books']['exists']}, "
+              f"logs.json 存在={fp_empty['logs']['exists']}")
+
+        fp_pre_before = get_data_file_fingerprint()
         pre_chain_r, _ = api("POST", "/api/snapshot/precheck", snapshot_chain)
         pre_report = pre_chain_r["data"]
         print_report_summary(pre_report)
         assert_true(pre_report["can_import"] is True, "空环境预检 can_import=True")
+        fp_pre_after = get_data_file_fingerprint()
+        assert_data_files_unchanged(fp_pre_before, fp_pre_after, "场景4 预检后")
 
+        assert_true(pre_report["summary"]["total_will_add"] ==
+                    pre_report["summary"]["breakdown"]["books"]["will_add"] +
+                    pre_report["summary"]["breakdown"]["active_reservations"]["will_add"] +
+                    pre_report["summary"]["breakdown"]["blacklist"]["will_add"] +
+                    pre_report["summary"]["breakdown"]["logs"]["will_add"],
+                    "will_add 总数等于四块之和")
+        assert_true(pre_report["summary"]["total_will_block"] == 0, "空环境预检 will_block=0")
+        assert_true(pre_report["summary"]["total_will_skip"] == 0, "空环境预检 will_skip=0")
+
+        fp_dry_before = get_data_file_fingerprint()
         dry_chain_r, dry_chain_s = api("POST", "/api/snapshot/import?dry_run=true", snapshot_chain)
         assert_true(dry_chain_s == 200 and dry_chain_r["ok"], "dry-run 通过 HTTP 200")
         assert_true(dry_chain_r["imported_counts"]["books"] == snapshot_chain["counts"]["books"],
                     "dry-run 显示书目数匹配")
         assert_true(get_book_count() == 0, "dry-run 不写库，书目数保持 0")
+        fp_dry_after = get_data_file_fingerprint()
+        assert_data_files_unchanged(fp_dry_before, fp_dry_after, "场景4 dry-run 后")
+
+        assert_true("report" in dry_chain_r, "dry-run 成功响应中包含 report 字段")
+        assert_report_consistency(pre_report, dry_chain_r["report"], "场景4 预检与dry-run")
 
         imp_chain_r, imp_chain_s = api("POST", "/api/snapshot/import?dry_run=false", snapshot_chain)
         assert_true(imp_chain_s == 200 and imp_chain_r["ok"], "正式导入成功 HTTP 200")
@@ -455,10 +578,10 @@ if __name__ == "__main__":
             dest_queue = get_active_reservations(bid)
             assert_true(len(dest_queue) == len(source_queues[bid]),
                         f"{bid} 队列长度匹配：源={len(source_queues[bid])}, 目标={len(dest_queue)}")
-            for r_s, r_d in zip(
-                sorted(source_queues[bid], key=lambda x: x["created_at"]),
-                sorted(dest_queue, key=lambda x: x["created_at"]),
-            ):
+
+            src_sorted = sorted(source_queues[bid], key=lambda x: x["created_at"])
+            dst_sorted = sorted(dest_queue, key=lambda x: x["created_at"])
+            for r_s, r_d in zip(src_sorted, dst_sorted):
                 assert_true(r_s["reader_id"] == r_d["reader_id"],
                             f"{bid} 队列顺序一致：{r_s['reader_id']} == {r_d['reader_id']}")
                 assert_true(r_s["status"] == r_d["status"],
@@ -474,10 +597,21 @@ if __name__ == "__main__":
             assert_true(src_log_ids == dst_log_ids,
                         f"{bid} 日志过滤结果一致：源={len(src_log_ids)}条，目标={len(dst_log_ids)}条")
 
+            src_log_actions = sorted([l["action"] for l in source_logs[bid]])
+            dst_log_actions = sorted([l["action"] for l in dest_logs])
+            assert_true(src_log_actions == dst_log_actions,
+                        f"{bid} 日志 action 列表完全一致")
+
         dest_blacklist = get_blacklist()
         dest_bl_ids = {b["reader_id"] for b in dest_blacklist}
         src_bl_ids = {b["reader_id"] for b in source_blacklist}
         assert_true(src_bl_ids == dest_bl_ids, f"黑名单一致：{src_bl_ids} == {dest_bl_ids}")
+
+        for b_src in source_blacklist:
+            b_dest = next((b for b in dest_blacklist if b["reader_id"] == b_src["reader_id"]), None)
+            assert_true(b_dest is not None, f"黑名单 {b_src['reader_id']} 存在")
+            assert_true(b_dest["reason"] == b_src["reason"],
+                        f"黑名单 {b_src['reader_id']} 原因一致")
 
         print("  [链路] 目标环境：队列顺序、可借状态、日志过滤结果、黑名单 = 完全匹配源环境")
 
@@ -535,13 +669,32 @@ if __name__ == "__main__":
         pre_cfg = pre_cfg_r["data"]
         assert_true(pre_cfg["can_import"] is True, "配置切换新增书目预检通过")
 
+        assert_true(pre_cfg["summary"]["breakdown"]["books"]["will_add"] == 2,
+                    "配置切换新增书目 will_add=2")
+        assert_true(pre_cfg["summary"]["total_conflicts"] == 0,
+                    "配置切换新增书目 0 冲突")
+
+        fp_cfg_before = get_data_file_fingerprint()
         dry_cfg_r, dry_cfg_s = api("POST", "/api/snapshot/import?dry_run=true", new_books_snapshot)
         assert_true(dry_cfg_s == 200 and dry_cfg_r["ok"], "dry-run 配置切换新增书目通过")
+        fp_cfg_after = get_data_file_fingerprint()
+        assert_data_files_unchanged(fp_cfg_before, fp_cfg_after, "5.3 配置切换 dry-run 后")
+
+        assert_true("report" in dry_cfg_r, "配置切换 dry-run 响应包含 report")
+        assert_report_consistency(pre_cfg, dry_cfg_r["report"], "5.3 配置切换预检与dry-run")
 
         imp_cfg_r, imp_cfg_s = api("POST", "/api/snapshot/import?dry_run=false", new_books_snapshot)
         assert_true(imp_cfg_s == 200 and imp_cfg_r["ok"], "正式导入配置切换新增书目成功")
         assert_true(get_book_count() == len(source_books) + 2,
                     f"配置切换导入后书目总数 = 原 {len(source_books)} + 新 2 = {len(source_books) + 2}")
+
+        queue_after_cfg = get_active_reservations("CHAIN-B001")
+        assert_true(len(queue_after_cfg) == len(source_queues["CHAIN-B001"]),
+                    "配置切换后原有队列长度不变")
+
+        logs_after_cfg = get_logs_by_book("CHAIN-B001", limit=1000)
+        assert_true(len(logs_after_cfg) == len(source_logs["CHAIN-B001"]),
+                    "配置切换后原有日志条数不变")
 
         print("  [配置切换] 新增书目顺利导入，原有队列/日志完全不受影响")
 
@@ -648,7 +801,11 @@ if __name__ == "__main__":
 
         subsection("6.1 dry-run 在混合场景下也返回同口径")
 
+        fp_mix_dry_before = get_data_file_fingerprint()
         mixed_dry_r, mixed_dry_s = api("POST", "/api/snapshot/import?dry_run=true", mixed_big_snapshot)
+        fp_mix_dry_after = get_data_file_fingerprint()
+        assert_data_files_unchanged(fp_mix_dry_before, fp_mix_dry_after, "6.1 混合场景 dry-run 后")
+
         print(f"  [dry-run] HTTP {mixed_dry_s}, ok={mixed_dry_r.get('ok')}")
 
         if mixed_dry_s == 400:
@@ -661,6 +818,9 @@ if __name__ == "__main__":
             print(f"  [dry-run 409 conflict 类型] {conf_types}")
         else:
             assert_true(False, f"混合场景 dry-run 应返回 400 或 409，实际 {mixed_dry_s}")
+
+        assert_true("report" in mixed_dry_r, "混合场景 dry-run 响应包含 report")
+        assert_report_consistency(mixed_report, mixed_dry_r["report"], "6.1 混合场景预检与dry-run")
 
         subsection("6.2 正式导入在混合场景下整体回滚 - 不改动任何数据")
 
