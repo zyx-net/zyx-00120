@@ -1,0 +1,344 @@
+[
+  {
+    "log_id": "1b337895-2871-4029-afc5-c13d50965eb6",
+    "timestamp": "2026-06-18T17:00:27.959346+00:00",
+    "action": "add_book",
+    "reader_id": null,
+    "book_id": "B001",
+    "detail": "添加书目 深入理解计算机系统",
+    "success": true
+  },
+  {
+    "log_id": "0e9aa316-8151-402b-9673-6ae4c6482cfb",
+    "timestamp": "2026-06-18T17:00:27.964720+00:00",
+    "action": "add_book",
+    "reader_id": null,
+    "book_id": "B002",
+    "detail": "添加书目 算法导论",
+    "success": true
+  },
+  {
+    "log_id": "e7fb1bf4-8458-43be-a2cf-14afc211647e",
+    "timestamp": "2026-06-18T17:00:27.981653+00:00",
+    "action": "update_book",
+    "reader_id": null,
+    "book_id": "B002",
+    "detail": "更新书目 B002",
+    "success": true
+  },
+  {
+    "log_id": "f6bc7122-e20b-46f9-95fb-1b4247eaf664",
+    "timestamp": "2026-06-18T17:00:27.987662+00:00",
+    "action": "reserve",
+    "reader_id": "R001",
+    "book_id": "B001",
+    "detail": "预约成功，状态=available",
+    "success": true
+  },
+  {
+    "log_id": "c61c4bf2-b17c-4eb4-80a1-c23a7aab9945",
+    "timestamp": "2026-06-18T17:00:27.993395+00:00",
+    "action": "reserve",
+    "reader_id": "R002",
+    "book_id": "B001",
+    "detail": "预约成功，状态=available",
+    "success": true
+  },
+  {
+    "log_id": "6be636a7-b431-4465-9997-2f4a926f0c35",
+    "timestamp": "2026-06-18T17:00:28.000027+00:00",
+    "action": "reserve",
+    "reader_id": "R003",
+    "book_id": "B001",
+    "detail": "预约成功，状态=waiting",
+    "success": true
+  },
+  {
+    "log_id": "5e642b0c-f011-4153-b533-4880694dfbd8",
+    "timestamp": "2026-06-18T17:00:28.014346+00:00",
+    "action": "checkout",
+    "reader_id": "R001",
+    "book_id": "B001",
+    "detail": "借出成功，应还日期=2026-07-18T17:00:28.013224+00:00",
+    "success": true
+  },
+  {
+    "log_id": "93afb50f-e55a-4b8e-8924-17c2f95df25a",
+    "timestamp": "2026-06-18T17:00:28.019945+00:00",
+    "action": "checkout",
+    "reader_id": "R002",
+    "book_id": "B001",
+    "detail": "借出成功，应还日期=2026-07-18T17:00:28.019065+00:00",
+    "success": true
+  },
+  {
+    "log_id": "fbeb75c6-e817-4020-a428-a8cb826b25df",
+    "timestamp": "2026-06-18T17:00:28.025862+00:00",
+    "action": "return",
+    "reader_id": "R001",
+    "book_id": "B001",
+    "detail": "归还成功，借阅ID=8eeca2db-43f4-46b1-84e8-aa7706c9df9e",
+    "success": true
+  },
+  {
+    "log_id": "2aa0a2a7-b241-4403-b8e3-d331fc0436ea",
+    "timestamp": "2026-06-18T17:00:28.030297+00:00",
+    "action": "promote",
+    "reader_id": "R003",
+    "book_id": "B001",
+    "detail": "读者 R003 晋级为待取状态",
+    "success": true
+  },
+  {
+    "log_id": "d740072d-e3bc-4baf-9f24-083c6ef21ef8",
+    "timestamp": "2026-06-18T17:00:28.040498+00:00",
+    "action": "reserve",
+    "reader_id": "R002",
+    "book_id": "B001",
+    "detail": "读者 R002 对书目 B001 已有活跃预约/借阅，不可重复占位",
+    "success": false
+  },
+  {
+    "log_id": "bcc216b4-3da7-4d82-aa91-df8d08141259",
+    "timestamp": "2026-06-18T17:00:28.048957+00:00",
+    "action": "reserve",
+    "reader_id": "R_BAD",
+    "book_id": "B001",
+    "detail": "预约成功，状态=waiting",
+    "success": true
+  },
+  {
+    "log_id": "9716e0b2-3c32-42d6-8345-de69aec9e605",
+    "timestamp": "2026-06-18T17:00:28.066017+00:00",
+    "action": "checkout",
+    "reader_id": "R_BAD",
+    "book_id": "B001",
+    "detail": "读者 R_BAD 在等待队列中，尚未轮到借出，不可越过队首",
+    "success": false
+  },
+  {
+    "log_id": "fedcee25-b89e-4de6-93f4-25b1c8b46d41",
+    "timestamp": "2026-06-18T17:00:28.071085+00:00",
+    "action": "return",
+    "reader_id": "R999",
+    "book_id": "B001",
+    "detail": "读者 R999 对书目 B001 没有借阅记录，无法归还",
+    "success": false
+  },
+  {
+    "log_id": "9e2c4b76-fa2a-4743-993e-5382ca64a23f",
+    "timestamp": "2026-06-18T17:00:28.078439+00:00",
+    "action": "blacklist_add",
+    "reader_id": "R_BAD",
+    "book_id": null,
+    "detail": "加入黑名单: 恶意预约不取书",
+    "success": true
+  },
+  {
+    "log_id": "4ffa66e1-99c9-44e7-88c6-c453c96b8ee9",
+    "timestamp": "2026-06-18T17:00:28.084202+00:00",
+    "action": "reserve",
+    "reader_id": "R_BAD",
+    "book_id": "B001",
+    "detail": "读者 R_BAD 在黑名单中，无法预约",
+    "success": false
+  },
+  {
+    "log_id": "dc2942a0-9d6c-46d4-b3fb-60ae0113a259",
+    "timestamp": "2026-06-18T17:00:28.089598+00:00",
+    "action": "blacklist_remove",
+    "reader_id": "R_BAD",
+    "book_id": null,
+    "detail": "移出黑名单",
+    "success": true
+  },
+  {
+    "log_id": "658af31b-7bad-434c-a6db-47e5f5ba0d64",
+    "timestamp": "2026-06-18T17:00:28.103443+00:00",
+    "action": "reserve",
+    "reader_id": "R004",
+    "book_id": "B002",
+    "detail": "预约成功，状态=available",
+    "success": true
+  },
+  {
+    "log_id": "e4c80339-945b-4b48-8881-7f16fe574188",
+    "timestamp": "2026-06-18T17:00:28.122392+00:00",
+    "action": "cancel",
+    "reader_id": "R004",
+    "book_id": "B002",
+    "detail": "取消预约，原状态=available",
+    "success": true
+  },
+  {
+    "log_id": "baa9f6d1-2b5b-40e7-bfa0-dfb74c98f801",
+    "timestamp": "2026-06-18T17:00:28.156295+00:00",
+    "action": "delete_book",
+    "reader_id": null,
+    "book_id": "B002",
+    "detail": "删除书目 B002",
+    "success": true
+  },
+  {
+    "log_id": "89f2edba-5ef6-4b5e-a359-633d07c31607",
+    "timestamp": "2026-06-18T17:03:08.235224+00:00",
+    "action": "add_book",
+    "reader_id": null,
+    "book_id": "RVW-HTTP-001",
+    "detail": "添加书目 Reviewer HTTP Book",
+    "success": true
+  },
+  {
+    "log_id": "8889d802-302d-4f7c-8ee3-31d94d1b1258",
+    "timestamp": "2026-06-18T17:03:08.242996+00:00",
+    "action": "reserve",
+    "reader_id": "RVW-R1",
+    "book_id": "RVW-HTTP-001",
+    "detail": "预约成功，状态=available",
+    "success": true
+  },
+  {
+    "log_id": "2d5c17e3-afe1-4fa1-915f-26784a2814bc",
+    "timestamp": "2026-06-18T17:03:08.250918+00:00",
+    "action": "reserve",
+    "reader_id": "RVW-R2",
+    "book_id": "RVW-HTTP-001",
+    "detail": "预约成功，状态=waiting",
+    "success": true
+  },
+  {
+    "log_id": "9a661483-9cfe-4d35-9422-76e89a8c76db",
+    "timestamp": "2026-06-18T17:03:08.256290+00:00",
+    "action": "reserve",
+    "reader_id": "RVW-R2",
+    "book_id": "RVW-HTTP-001",
+    "detail": "读者 RVW-R2 对书目 RVW-HTTP-001 已有活跃预约/借阅，不可重复占位",
+    "success": false
+  },
+  {
+    "log_id": "0e475b82-3a4d-4be6-8af5-c46debf2835c",
+    "timestamp": "2026-06-18T17:03:08.263008+00:00",
+    "action": "checkout",
+    "reader_id": "RVW-R2",
+    "book_id": "RVW-HTTP-001",
+    "detail": "读者 RVW-R2 在等待队列中，尚未轮到借出，不可越过队首",
+    "success": false
+  },
+  {
+    "log_id": "0365ace0-19ae-4fb6-a1d3-1f817333eb0f",
+    "timestamp": "2026-06-18T17:03:08.268930+00:00",
+    "action": "expire",
+    "reader_id": "RVW-R1",
+    "book_id": "RVW-HTTP-001",
+    "detail": "预约 60b7b2d0-f0b0-4a99-9d34-5090e37479f9 已过期释放",
+    "success": true
+  },
+  {
+    "log_id": "55ca9738-f337-4677-89f6-0a4a174d7e02",
+    "timestamp": "2026-06-18T17:03:08.272484+00:00",
+    "action": "promote",
+    "reader_id": "RVW-R2",
+    "book_id": "RVW-HTTP-001",
+    "detail": "读者 RVW-R2 晋级为待取状态",
+    "success": true
+  },
+  {
+    "log_id": "408a2a43-beab-4838-91ab-c68d887ec6d1",
+    "timestamp": "2026-06-18T17:03:08.506762+00:00",
+    "action": "checkout",
+    "reader_id": "RVW-R2",
+    "book_id": "RVW-HTTP-001",
+    "detail": "预约已过期（过期时间 2026-06-18T17:03:08.271615+00:00），无法借出",
+    "success": false
+  },
+  {
+    "log_id": "bc6750e5-ab0a-4549-8588-e827de48486c",
+    "timestamp": "2026-06-18T17:03:08.514114+00:00",
+    "action": "return",
+    "reader_id": "RVW-NOLOAN",
+    "book_id": "RVW-HTTP-001",
+    "detail": "读者 RVW-NOLOAN 对书目 RVW-HTTP-001 没有借阅记录，无法归还",
+    "success": false
+  },
+  {
+    "log_id": "1f48c41e-6d2d-47ed-9cd7-6a605175fa6f",
+    "timestamp": "2026-06-18T17:03:08.519312+00:00",
+    "action": "return",
+    "reader_id": "RVW-R2",
+    "book_id": "RVW-HTTP-001",
+    "detail": "读者 RVW-R2 对书目 RVW-HTTP-001 没有借阅记录，无法归还",
+    "success": false
+  },
+  {
+    "log_id": "986015c5-3156-41f6-94ff-497b1b73947c",
+    "timestamp": "2026-06-18T17:03:08.764315+00:00",
+    "action": "expire",
+    "reader_id": "RVW-R2",
+    "book_id": "RVW-HTTP-001",
+    "detail": "预约 5d11c284-aa71-4a44-b680-b15e76ccbe2d 已过期释放",
+    "success": true
+  },
+  {
+    "log_id": "f763d7ad-f65e-4340-a44a-93cb71fcdc37",
+    "timestamp": "2026-06-18T17:03:51.765755+00:00",
+    "action": "add_book",
+    "reader_id": null,
+    "book_id": "RVW-RESTART-001",
+    "detail": "添加书目 Reviewer Restart Book",
+    "success": true
+  },
+  {
+    "log_id": "568954bb-8e0c-4142-a1fb-5e0d54b8f207",
+    "timestamp": "2026-06-18T17:03:51.771885+00:00",
+    "action": "reserve",
+    "reader_id": "RVW-A",
+    "book_id": "RVW-RESTART-001",
+    "detail": "预约成功，状态=available",
+    "success": true
+  },
+  {
+    "log_id": "c7eaacff-104a-4fdb-8a18-55ad935a76ea",
+    "timestamp": "2026-06-18T17:03:51.777316+00:00",
+    "action": "checkout",
+    "reader_id": "RVW-A",
+    "book_id": "RVW-RESTART-001",
+    "detail": "借出成功，应还日期=2026-06-23T17:03:51.776396+00:00",
+    "success": true
+  },
+  {
+    "log_id": "8cb626b7-758c-418d-bcc6-236f2bff75b1",
+    "timestamp": "2026-06-18T17:03:51.782843+00:00",
+    "action": "reserve",
+    "reader_id": "RVW-B",
+    "book_id": "RVW-RESTART-001",
+    "detail": "预约成功，状态=waiting",
+    "success": true
+  },
+  {
+    "log_id": "d74da57e-dcc2-4fa2-bf86-01dcbdc91663",
+    "timestamp": "2026-06-18T17:03:51.788065+00:00",
+    "action": "reserve",
+    "reader_id": "RVW-C",
+    "book_id": "RVW-RESTART-001",
+    "detail": "预约成功，状态=waiting",
+    "success": true
+  },
+  {
+    "log_id": "3f078ae9-ca4f-4075-ac25-c64c9d8820e9",
+    "timestamp": "2026-06-18T17:03:51.809468+00:00",
+    "action": "return",
+    "reader_id": "RVW-A",
+    "book_id": "RVW-RESTART-001",
+    "detail": "归还成功，借阅ID=34acf655-fa17-4a82-9091-559b58067c5a",
+    "success": true
+  },
+  {
+    "log_id": "e69a3d58-5082-4553-a70b-af7e210a7b3b",
+    "timestamp": "2026-06-18T17:03:51.813172+00:00",
+    "action": "promote",
+    "reader_id": "RVW-B",
+    "book_id": "RVW-RESTART-001",
+    "detail": "读者 RVW-B 晋级为待取状态",
+    "success": true
+  }
+]

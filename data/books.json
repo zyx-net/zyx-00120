@@ -1,0 +1,23 @@
+[
+  {
+    "book_id": "B001",
+    "title": "深入理解计算机系统",
+    "total_copies": 2,
+    "borrow_days": 30,
+    "retain_hours": 48
+  },
+  {
+    "book_id": "RVW-HTTP-001",
+    "title": "Reviewer HTTP Book",
+    "total_copies": 1,
+    "borrow_days": 7,
+    "retain_hours": 0
+  },
+  {
+    "book_id": "RVW-RESTART-001",
+    "title": "Reviewer Restart Book",
+    "total_copies": 1,
+    "borrow_days": 5,
+    "retain_hours": 1
+  }
+]

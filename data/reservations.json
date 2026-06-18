@@ -1,0 +1,112 @@
+[
+  {
+    "reservation_id": "8eeca2db-43f4-46b1-84e8-aa7706c9df9e",
+    "book_id": "B001",
+    "reader_id": "R001",
+    "status": "returned",
+    "created_at": "2026-06-18T17:00:27.986819+00:00",
+    "available_at": "2026-06-18T17:00:27.986819+00:00",
+    "expire_at": null,
+    "borrowed_at": "2026-06-18T17:00:28.013224+00:00",
+    "returned_at": "2026-06-18T17:00:28.025017+00:00"
+  },
+  {
+    "reservation_id": "aad035a4-74db-4dde-b5dc-e507a7b19f59",
+    "book_id": "B001",
+    "reader_id": "R002",
+    "status": "borrowed",
+    "created_at": "2026-06-18T17:00:27.992064+00:00",
+    "available_at": "2026-06-18T17:00:27.992064+00:00",
+    "expire_at": null,
+    "borrowed_at": "2026-06-18T17:00:28.019065+00:00",
+    "returned_at": null
+  },
+  {
+    "reservation_id": "be0df03e-20b5-433a-bed5-98b1557825c5",
+    "book_id": "B001",
+    "reader_id": "R003",
+    "status": "available",
+    "created_at": "2026-06-18T17:00:27.998543+00:00",
+    "available_at": "2026-06-18T17:00:28.029051+00:00",
+    "expire_at": "2026-06-20T17:00:28.029051+00:00",
+    "borrowed_at": null,
+    "returned_at": null
+  },
+  {
+    "reservation_id": "83efe2ef-9ae4-4a14-9172-19aeb7ac9ec7",
+    "book_id": "B001",
+    "reader_id": "R_BAD",
+    "status": "waiting",
+    "created_at": "2026-06-18T17:00:28.047270+00:00",
+    "available_at": null,
+    "expire_at": null,
+    "borrowed_at": null,
+    "returned_at": null
+  },
+  {
+    "reservation_id": "72c46b70-acf4-46e9-8b56-ce58da06c25b",
+    "book_id": "B002",
+    "reader_id": "R004",
+    "status": "cancelled",
+    "created_at": "2026-06-18T17:00:28.102187+00:00",
+    "available_at": "2026-06-18T17:00:28.102187+00:00",
+    "expire_at": "2026-06-19T17:00:28.102187+00:00",
+    "borrowed_at": null,
+    "returned_at": null
+  },
+  {
+    "reservation_id": "60b7b2d0-f0b0-4a99-9d34-5090e37479f9",
+    "book_id": "RVW-HTTP-001",
+    "reader_id": "RVW-R1",
+    "status": "expired",
+    "created_at": "2026-06-18T17:03:08.241452+00:00",
+    "available_at": "2026-06-18T17:03:08.241452+00:00",
+    "expire_at": "2026-06-18T17:03:08.241452+00:00",
+    "borrowed_at": null,
+    "returned_at": null
+  },
+  {
+    "reservation_id": "5d11c284-aa71-4a44-b680-b15e76ccbe2d",
+    "book_id": "RVW-HTTP-001",
+    "reader_id": "RVW-R2",
+    "status": "expired",
+    "created_at": "2026-06-18T17:03:08.249057+00:00",
+    "available_at": "2026-06-18T17:03:08.271615+00:00",
+    "expire_at": "2026-06-18T17:03:08.271615+00:00",
+    "borrowed_at": null,
+    "returned_at": null
+  },
+  {
+    "reservation_id": "34acf655-fa17-4a82-9091-559b58067c5a",
+    "book_id": "RVW-RESTART-001",
+    "reader_id": "RVW-A",
+    "status": "returned",
+    "created_at": "2026-06-18T17:03:51.770574+00:00",
+    "available_at": "2026-06-18T17:03:51.770574+00:00",
+    "expire_at": null,
+    "borrowed_at": "2026-06-18T17:03:51.776396+00:00",
+    "returned_at": "2026-06-18T17:03:51.808127+00:00"
+  },
+  {
+    "reservation_id": "92594d79-afac-40a9-8d0e-9e9eb381e54b",
+    "book_id": "RVW-RESTART-001",
+    "reader_id": "RVW-B",
+    "status": "available",
+    "created_at": "2026-06-18T17:03:51.781573+00:00",
+    "available_at": "2026-06-18T17:03:51.812452+00:00",
+    "expire_at": "2026-06-18T18:03:51.812452+00:00",
+    "borrowed_at": null,
+    "returned_at": null
+  },
+  {
+    "reservation_id": "de069ccf-e34a-4dc4-9285-222f4cb68133",
+    "book_id": "RVW-RESTART-001",
+    "reader_id": "RVW-C",
+    "status": "waiting",
+    "created_at": "2026-06-18T17:03:51.786810+00:00",
+    "available_at": null,
+    "expire_at": null,
+    "borrowed_at": null,
+    "returned_at": null
+  }
+]
