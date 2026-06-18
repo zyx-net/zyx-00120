@@ -59,6 +59,12 @@ python demo4.py
 python demo5.py
 ```
 
+迁移预检报告回归测试（覆盖空快照、混合冲突、重复预约、黑名单原因不一致、dry-run 不写入、正式导入回滚、队列顺序核对、可借状态核对、日志过滤核对、服务重启一致性）：
+
+```bash
+python demo6.py
+```
+
 ## 数据文件位置
 
 所有持久化数据以 UTF-8 JSON 格式存储在项目目录下的 `data/` 文件夹，服务重启后完整恢复。
@@ -131,6 +137,7 @@ python demo5.py
 |------|------|------|------|
 | GET | `/api/snapshot/export` | 导出完整快照（书目配置 + 活跃预约 + 黑名单 + 相关状态日志） | — |
 | POST | `/api/snapshot/import` | 导入完整快照（支持 dry-run 预检，整批回滚） | `dry_run`(可选，`true`/`false`，默认 `false`) |
+| POST | `/api/snapshot/precheck` | 迁移预检报告（不落库，按书目/预约/黑名单/日志四块展示差异明细和可读摘要） | — |
 
 ---
 
@@ -792,6 +799,238 @@ python demo5.py
 9. 服务重启后 - 队列顺序、可借状态、日志完全一致
 10. 导入数据可正常使用 - 预约、借出功能正常
 11. 完整迁移流程模拟 - A 环境导出 → B 环境导入
+
+---
+
+## 迁移预检报告接口详解（v2.1 新增）
+
+### POST `/api/snapshot/precheck` - 迁移预检报告
+
+**功能说明**：提交与 `/api/snapshot/import` 同格式的 JSON，获得不落库的详细差异报告。报告按书目、活跃预约、黑名单、日志四块分类，每块细分"将新增、冲突、缺依赖、格式错误"四类明细，并提供可读的 summary 摘要，帮助用户在正式导入前全面了解差异。
+
+**核心特性**：
+- **复用校验逻辑**：与正式导入共用同一套校验和冲突判断函数，口径完全一致，绝无"dry-run 通过但正式导入马上失败"的情况
+- **四块分类**：书目、活跃预约、黑名单、日志，每块独立统计
+- **四类明细**：will_add（将新增）、conflicts（冲突）、missing_dependencies（缺依赖）、format_errors（格式错误）
+- **可读摘要**：summary 包含状态、消息、总数、分类统计
+- **队列顺序核对**：按 `created_at` 展示每本书的队列顺序，方便核对
+- **可借状态核对**：计算每本书的借出/待取/等待/可借数量，辅助验证状态一致性
+- **完全不落库**：仅校验不写入，所有数据（含日志）保持原状
+- **服务重启后一致**：预检依赖的数据与正式导入结果一致，重启后不变
+
+**请求体格式**：与 `GET /api/snapshot/export` 的响应格式完全一致（即与 `POST /api/snapshot/import` 的请求格式相同）
+
+**请求示例**：
+
+```bash
+curl -X POST http://127.0.0.1:5000/api/snapshot/precheck \
+  -H "Content-Type: application/json" \
+  -d "$(cat snapshot.json)"
+```
+
+**响应示例 - 预检通过（HTTP 200）**：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "dry_run": true,
+    "can_import": true,
+    "summary": {
+      "status": "ready",
+      "message": "预检通过，可以安全导入",
+      "total_will_add": 10,
+      "total_conflicts": 0,
+      "total_missing_dependencies": 0,
+      "total_format_errors": 0,
+      "breakdown": {
+        "books": { "will_add": 2, "conflicts": 0, "missing_dependencies": 0, "format_errors": 0 },
+        "active_reservations": { "will_add": 4, "conflicts": 0, "missing_dependencies": 0, "format_errors": 0 },
+        "blacklist": { "will_add": 1, "conflicts": 0, "missing_dependencies": 0, "format_errors": 0 },
+        "logs": { "will_add": 3, "conflicts": 0, "missing_dependencies": 0, "format_errors": 0 }
+      },
+      "queue_order_check": {
+        "B001": {
+          "total_active": 3,
+          "waiting_count": 2,
+          "order_by_created_at": [
+            {"reader_id": "R001", "status": "borrowed", "created_at": "2026-06-19T08:00:00+00:00"},
+            {"reader_id": "R002", "status": "waiting", "created_at": "2026-06-19T09:00:00+00:00"}
+          ],
+          "is_ordered_by_created_at": true
+        }
+      },
+      "availability_check": {
+        "B001": {
+          "total_copies": 5,
+          "borrowed": 1,
+          "to_pick": 1,
+          "waiting": 2,
+          "available_copies": 3,
+          "has_overflow": false
+        }
+      }
+    },
+    "details": {
+      "books": {
+        "will_add": [
+          {"book_id": "B001", "title": "Python编程", "total_copies": 5, "borrow_days": 30, "retain_hours": 24}
+        ],
+        "conflicts": [],
+        "missing_dependencies": [],
+        "format_errors": []
+      },
+      "active_reservations": {
+        "will_add": [
+          {"reservation_id": "uuid-1", "book_id": "B001", "reader_id": "R001", "status": "borrowed", "created_at": "..."}
+        ],
+        "conflicts": [],
+        "missing_dependencies": [],
+        "format_errors": []
+      },
+      "blacklist": {
+        "will_add": [
+          {"reader_id": "BLACK-001", "reason": "逾期未还", "added_at": "..."}
+        ],
+        "conflicts": [],
+        "missing_dependencies": [],
+        "format_errors": []
+      },
+      "logs": {
+        "will_add": [
+          {"log_id": "log-1", "action": "reserve", "timestamp": "...", "book_id": "B001", "reader_id": "R001"}
+        ],
+        "conflicts": [],
+        "missing_dependencies": [],
+        "format_errors": []
+      }
+    }
+  }
+}
+```
+
+**响应示例 - 有冲突（HTTP 200，注意：预检始终返回 200，冲突在报告内）**：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "dry_run": true,
+    "can_import": false,
+    "summary": {
+      "status": "has_conflicts",
+      "message": "存在冲突，需解决冲突后再导入",
+      "total_will_add": 5,
+      "total_conflicts": 2,
+      "total_missing_dependencies": 1,
+      "total_format_errors": 0,
+      "breakdown": { ... }
+    },
+    "details": {
+      "books": {
+        "will_add": [...],
+        "conflicts": [
+          {
+            "type": "duplicate_book_id",
+            "book_id": "B001",
+            "section": "books",
+            "existing_config": { ... },
+            "import_config": { ... },
+            "message": "目标环境已存在书目 B001"
+          }
+        ],
+        "missing_dependencies": [],
+        "format_errors": []
+      },
+      "active_reservations": {
+        "will_add": [...],
+        "conflicts": [...],
+        "missing_dependencies": [
+          {
+            "type": "missing_dependency",
+            "book_id": "NONEXIST-B001",
+            "reader_id": "R-TEST-001",
+            "section": "active_reservations",
+            "message": "预约记录引用了快照中不存在的书目 NONEXIST-B001"
+          }
+        ],
+        "format_errors": []
+      },
+      ...
+    }
+  }
+}
+```
+
+**summary.status 取值说明**：
+
+| 状态 | 说明 | can_import |
+|------|------|------------|
+| `ready` | 预检通过，可以安全导入 | `true` |
+| `has_conflicts` | 存在冲突，需解决后再导入 | `false` |
+| `missing_dependency` | 存在缺失依赖，需补充数据 | `false` |
+| `format_error` | 存在格式错误，需先修正数据格式 | `false` |
+
+**冲突类型一览**：与 `POST /api/snapshot/import` 的冲突类型完全一致（共用同一套检测逻辑）
+
+---
+
+### 一键运行预检报告测试
+
+```bash
+python demo6.py
+```
+
+该脚本覆盖以下 13 个测试场景：
+1. 预检报告 API 存在且可调用
+2. 空快照预检 - 验证格式和零数据场景
+3. 完整快照预检 - 全部新增场景，验证 will_add 明细
+4. 混合冲突预检 - 书目冲突 + 预约冲突 + 黑名单冲突 + 缺依赖同时存在
+5. 重复预约检测 - 快照内重复预约识别
+6. 黑名单原因不一致检测
+7. 格式错误预检 - 非法格式的识别与分类
+8. 预检与正式导入口径一致 - 预测结果与实际导入完全匹配
+9. 预检不落库验证 - dry-run 不写入任何数据
+10. 正式导入冲突回滚验证 - 冲突时完整回滚
+11. 队列顺序和可借状态核对 - 导出-导入链路一致性
+12. 服务重启后预检结果一致
+13. 日志过滤结果核对
+
+---
+
+## 本次新增要点（对应 v2.1）
+
+**迁移预检报告能力**：
+
+1. **预检报告 API** (`POST /api/snapshot/precheck`)
+   - 提交与导入同格式的 JSON，获得不落库的详细差异报告
+   - 完全复用正式导入的校验和冲突判断逻辑，口径 100% 一致
+   - 绝无"预检通过但正式导入失败"的口径差
+
+2. **四块四类清晰展示**
+   - **四块**：书目、活跃预约、黑名单、日志
+   - **四类**：will_add（将新增）、conflicts（冲突）、missing_dependencies（缺依赖）、format_errors（格式错误）
+   - 每块独立统计，明细清晰可追溯
+
+3. **可读摘要 summary**
+   - 状态标识：ready / has_conflicts / missing_dependency / format_error
+   - 人性化消息，一目了然
+   - 总数统计 + 分类明细 breakdown
+   - 队列顺序核对（queue_order_check）：按 created_at 展示每本书队列顺序
+   - 可借状态核对（availability_check）：借出/待取/等待/可借数量计算
+
+4. **一致性保证**
+   - **口径一致**：预检与正式导入共用 `_analyze_snapshot_conflicts` 函数
+   - **数据一致**：预检依赖的数据与正式导入结果一致，服务重启后不变
+   - **导出-导入链路一致**：可用于核对队列顺序、可借状态、日志过滤结果
+
+5. **完全不落库**
+   - 预检仅做校验分析，不写入任何业务数据
+   - 仅写入一条 `precheck_snapshot` 汇总日志（不带 book_id/reader_id，不会被过滤命中）
+
+6. **测试覆盖** (`demo6.py`)
+   - 13 个测试场景，覆盖空快照、混合冲突、重复预约、黑名单原因不一致、格式错误、dry-run 不写入、正式导入回滚、队列顺序核对、可借状态核对、日志过滤核对、服务重启一致性
+   - 一键运行：`python demo6.py`
 
 ---
 

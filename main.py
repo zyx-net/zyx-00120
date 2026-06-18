@@ -218,6 +218,18 @@ def api_import_snapshot():
     }), 200
 
 
+@app.route("/api/snapshot/precheck", methods=["POST"])
+def api_precheck_snapshot():
+    d = request.get_json(force=True)
+    report, errors = service.precheck_snapshot(d)
+    if errors:
+        return jsonify({"ok": False, "error": errors}), 400
+    return jsonify({
+        "ok": True,
+        "data": report,
+    }), 200
+
+
 @app.route("/api/expire", methods=["POST"])
 def api_trigger_expire():
     count = service.process_expired()

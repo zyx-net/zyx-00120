@@ -1,23 +1,9 @@
 [
   {
-    "book_id": "BASE-B001",
-    "title": "基线书目1",
-    "total_copies": 5,
+    "book_id": "CHAIN-B001",
+    "title": "链路测试书",
+    "total_copies": 2,
     "borrow_days": 30,
     "retain_hours": 24
-  },
-  {
-    "book_id": "BASE-B002",
-    "title": "基线书目2",
-    "total_copies": 3,
-    "borrow_days": 14,
-    "retain_hours": 12
-  },
-  {
-    "book_id": "BASE-B003",
-    "title": "基线书目3",
-    "total_copies": 2,
-    "borrow_days": 21,
-    "retain_hours": 6
   }
 ]

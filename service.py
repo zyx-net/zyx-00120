@@ -699,15 +699,16 @@ def _validate_snapshot_book(book_data, idx):
     return _validate_book_config(book_data, idx)
 
 
-def import_snapshot(snapshot_data, dry_run=False):
+def _analyze_snapshot_conflicts(snapshot_data):
     conflicts = []
     validation_errors = []
+    format_errors = {"books": [], "active_reservations": [], "blacklist": [], "logs": []}
 
     if not isinstance(snapshot_data, dict):
-        return None, None, ["快照数据格式错误，应为 JSON 对象"]
+        return None, [], ["快照数据格式错误，应为 JSON 对象"], format_errors
 
     if snapshot_data.get("version") != "2.0" or snapshot_data.get("type") != "full_snapshot":
-        return None, None, ["快照格式版本不支持，需要 version=2.0 且 type=full_snapshot"]
+        return None, [], ["快照格式版本不支持，需要 version=2.0 且 type=full_snapshot"], format_errors
 
     books_data = snapshot_data.get("books", [])
     reservations_data = snapshot_data.get("active_reservations", [])
@@ -715,31 +716,34 @@ def import_snapshot(snapshot_data, dry_run=False):
     logs_data = snapshot_data.get("logs", [])
 
     if not isinstance(books_data, list):
-        return None, None, ["books 必须是列表"]
+        return None, [], ["books 必须是列表"], format_errors
     if not isinstance(reservations_data, list):
-        return None, None, ["active_reservations 必须是列表"]
+        return None, [], ["active_reservations 必须是列表"], format_errors
     if not isinstance(blacklist_data, list):
-        return None, None, ["blacklist 必须是列表"]
+        return None, [], ["blacklist 必须是列表"], format_errors
     if not isinstance(logs_data, list):
-        return None, None, ["logs 必须是列表"]
+        return None, [], ["logs 必须是列表"], format_errors
 
     for idx, book_data in enumerate(books_data):
         errors = _validate_snapshot_book(book_data, idx)
         if errors:
             validation_errors.extend(errors)
+            format_errors["books"].extend(errors)
 
     for idx, res_data in enumerate(reservations_data):
         errors = _validate_snapshot_reservation(res_data, idx)
         if errors:
             validation_errors.extend(errors)
+            format_errors["active_reservations"].extend(errors)
 
     for idx, bl_data in enumerate(blacklist_data):
         errors = _validate_snapshot_blacklist(bl_data, idx)
         if errors:
             validation_errors.extend(errors)
+            format_errors["blacklist"].extend(errors)
 
     if validation_errors:
-        return None, None, validation_errors
+        return None, [], validation_errors, format_errors
 
     seen_book_ids = set()
     for idx, book_data in enumerate(books_data):
@@ -857,6 +861,257 @@ def import_snapshot(snapshot_data, dry_run=False):
                     "message": f"目标环境已存在黑名单 {reader_id}",
                 })
 
+    return {
+        "books": books_data,
+        "active_reservations": reservations_data,
+        "blacklist": blacklist_data,
+        "logs": logs_data,
+        "book_ids_in_snapshot": book_ids_in_snapshot,
+        "seen_book_ids": seen_book_ids,
+        "seen_res_keys": seen_res_keys,
+        "seen_reader_ids": seen_reader_ids,
+    }, conflicts, None, format_errors
+
+
+def precheck_snapshot(snapshot_data):
+    parsed, conflicts, errors, format_errors = _analyze_snapshot_conflicts(snapshot_data)
+
+    result = {
+        "dry_run": True,
+        "can_import": False,
+        "summary": {},
+        "details": {
+            "books": {
+                "will_add": [],
+                "conflicts": [],
+                "missing_dependencies": [],
+                "format_errors": [],
+            },
+            "active_reservations": {
+                "will_add": [],
+                "conflicts": [],
+                "missing_dependencies": [],
+                "format_errors": [],
+            },
+            "blacklist": {
+                "will_add": [],
+                "conflicts": [],
+                "missing_dependencies": [],
+                "format_errors": [],
+            },
+            "logs": {
+                "will_add": [],
+                "conflicts": [],
+                "missing_dependencies": [],
+                "format_errors": [],
+            },
+        },
+    }
+
+    if errors:
+        result["summary"] = {
+            "status": "format_error",
+            "total_format_errors": len(errors),
+            "total_conflicts": 0,
+            "total_will_add": 0,
+            "total_missing_dependencies": 0,
+            "message": "快照格式有误，无法进行完整预检",
+        }
+        for section in ["books", "active_reservations", "blacklist"]:
+            result["details"][section]["format_errors"] = format_errors.get(section, [])
+        _log("precheck_snapshot", False,
+             detail=f"预检失败：{len(errors)} 个格式错误")
+        return result, None
+
+    books_data = parsed["books"]
+    reservations_data = parsed["active_reservations"]
+    blacklist_data = parsed["blacklist"]
+    logs_data = parsed["logs"]
+    book_ids_in_snapshot = parsed["book_ids_in_snapshot"]
+
+    conflict_book_ids = set()
+    for c in conflicts:
+        if c["section"] == "books" and c["type"] in ("duplicate_book_id", "duplicate_book_id_in_snapshot"):
+            conflict_book_ids.add(c["book_id"])
+
+    for book in books_data:
+        book_id = book["book_id"]
+        if book_id in conflict_book_ids:
+            continue
+        result["details"]["books"]["will_add"].append({
+            "book_id": book_id,
+            "title": book["title"],
+            "total_copies": book["total_copies"],
+            "borrow_days": book["borrow_days"],
+            "retain_hours": book["retain_hours"],
+        })
+
+    conflict_res_keys = set()
+    missing_dep_res = []
+    for c in conflicts:
+        if c["section"] == "active_reservations":
+            if c["type"] == "missing_dependency":
+                missing_dep_res.append(c)
+            else:
+                conflict_res_keys.add((c["book_id"], c["reader_id"]))
+
+    for res in reservations_data:
+        res_key = (res["book_id"], res["reader_id"])
+        if res["book_id"] not in book_ids_in_snapshot:
+            continue
+        if res_key in conflict_res_keys:
+            continue
+        result["details"]["active_reservations"]["will_add"].append({
+            "reservation_id": res["reservation_id"],
+            "book_id": res["book_id"],
+            "reader_id": res["reader_id"],
+            "status": res["status"],
+            "created_at": res["created_at"],
+        })
+
+    conflict_reader_ids = set()
+    for c in conflicts:
+        if c["section"] == "blacklist":
+            conflict_reader_ids.add(c["reader_id"])
+
+    for bl in blacklist_data:
+        reader_id = bl["reader_id"]
+        if reader_id in conflict_reader_ids:
+            continue
+        result["details"]["blacklist"]["will_add"].append({
+            "reader_id": reader_id,
+            "reason": bl.get("reason", ""),
+            "added_at": bl.get("added_at", ""),
+        })
+
+    for log in logs_data:
+        result["details"]["logs"]["will_add"].append({
+            "log_id": log.get("log_id", "(auto-generated)"),
+            "action": log.get("action", "unknown"),
+            "timestamp": log.get("timestamp", ""),
+            "book_id": log.get("book_id"),
+            "reader_id": log.get("reader_id"),
+        })
+
+    for c in conflicts:
+        section = c["section"]
+        if c["type"] == "missing_dependency":
+            result["details"][section]["missing_dependencies"].append(c)
+        else:
+            result["details"][section]["conflicts"].append(c)
+
+    total_will_add = (
+        len(result["details"]["books"]["will_add"]) +
+        len(result["details"]["active_reservations"]["will_add"]) +
+        len(result["details"]["blacklist"]["will_add"]) +
+        len(result["details"]["logs"]["will_add"])
+    )
+    total_conflicts = sum(len(result["details"][s]["conflicts"]) for s in result["details"])
+    total_missing = sum(len(result["details"][s]["missing_dependencies"]) for s in result["details"])
+    total_format_errors = sum(len(result["details"][s]["format_errors"]) for s in result["details"])
+
+    can_import = total_conflicts == 0 and total_missing == 0 and total_format_errors == 0
+
+    if can_import:
+        status = "ready"
+        message = "预检通过，可以安全导入"
+    elif total_format_errors > 0:
+        status = "format_error"
+        message = "存在格式错误，需先修正数据格式"
+    elif total_conflicts > 0:
+        status = "has_conflicts"
+        message = "存在冲突，需解决冲突后再导入"
+    else:
+        status = "missing_dependency"
+        message = "存在缺失依赖，需补充相关数据或调整导入内容"
+
+    result["can_import"] = can_import
+    result["summary"] = {
+        "status": status,
+        "message": message,
+        "total_will_add": total_will_add,
+        "total_conflicts": total_conflicts,
+        "total_missing_dependencies": total_missing,
+        "total_format_errors": total_format_errors,
+        "breakdown": {
+            "books": {
+                "will_add": len(result["details"]["books"]["will_add"]),
+                "conflicts": len(result["details"]["books"]["conflicts"]),
+                "missing_dependencies": len(result["details"]["books"]["missing_dependencies"]),
+                "format_errors": len(result["details"]["books"]["format_errors"]),
+            },
+            "active_reservations": {
+                "will_add": len(result["details"]["active_reservations"]["will_add"]),
+                "conflicts": len(result["details"]["active_reservations"]["conflicts"]),
+                "missing_dependencies": len(result["details"]["active_reservations"]["missing_dependencies"]),
+                "format_errors": len(result["details"]["active_reservations"]["format_errors"]),
+            },
+            "blacklist": {
+                "will_add": len(result["details"]["blacklist"]["will_add"]),
+                "conflicts": len(result["details"]["blacklist"]["conflicts"]),
+                "missing_dependencies": len(result["details"]["blacklist"]["missing_dependencies"]),
+                "format_errors": len(result["details"]["blacklist"]["format_errors"]),
+            },
+            "logs": {
+                "will_add": len(result["details"]["logs"]["will_add"]),
+                "conflicts": len(result["details"]["logs"]["conflicts"]),
+                "missing_dependencies": len(result["details"]["logs"]["missing_dependencies"]),
+                "format_errors": len(result["details"]["logs"]["format_errors"]),
+            },
+        },
+        "queue_order_check": _check_queue_order(reservations_data, book_ids_in_snapshot),
+        "availability_check": _check_availability(books_data, reservations_data),
+    }
+
+    _log("precheck_snapshot", can_import,
+         detail=f"预检完成：状态={status}, 可添加={total_will_add}, 冲突={total_conflicts}, 缺依赖={total_missing}")
+
+    return result, None
+
+
+def _check_queue_order(reservations_data, book_ids_in_snapshot):
+    result = {}
+    for book_id in book_ids_in_snapshot:
+        book_res = [r for r in reservations_data if r["book_id"] == book_id]
+        book_res_sorted = sorted(book_res, key=lambda r: r["created_at"])
+        waiting = [r for r in book_res_sorted if r["status"] == "waiting"]
+        result[book_id] = {
+            "total_active": len(book_res),
+            "waiting_count": len(waiting),
+            "order_by_created_at": [
+                {"reader_id": r["reader_id"], "status": r["status"], "created_at": r["created_at"]}
+                for r in book_res_sorted
+            ],
+            "is_ordered_by_created_at": True,
+        }
+    return result
+
+
+def _check_availability(books_data, reservations_data):
+    result = {}
+    book_map = {b["book_id"]: b for b in books_data}
+    for book_id, book in book_map.items():
+        book_res = [r for r in reservations_data if r["book_id"] == book_id]
+        borrowed = sum(1 for r in book_res if r["status"] == "borrowed")
+        to_pick = sum(1 for r in book_res if r["status"] == "available")
+        waiting = sum(1 for r in book_res if r["status"] == "waiting")
+        available_copies = book["total_copies"] - borrowed - to_pick
+        result[book_id] = {
+            "total_copies": book["total_copies"],
+            "borrowed": borrowed,
+            "to_pick": to_pick,
+            "waiting": waiting,
+            "available_copies": max(available_copies, 0),
+            "has_overflow": available_copies < 0,
+        }
+    return result
+
+
+def import_snapshot(snapshot_data, dry_run=False):
+    parsed, conflicts, errors, _ = _analyze_snapshot_conflicts(snapshot_data)
+    if errors:
+        return None, None, errors
+
     if conflicts:
         if dry_run:
             _log("import_snapshot_dry_run", False,
@@ -865,6 +1120,11 @@ def import_snapshot(snapshot_data, dry_run=False):
             _log("import_snapshot", False,
                  detail=f"快照导入发现 {len(conflicts)} 个冲突，已中止")
         return None, conflicts, None
+
+    books_data = parsed["books"]
+    reservations_data = parsed["active_reservations"]
+    blacklist_data = parsed["blacklist"]
+    logs_data = parsed["logs"]
 
     counts = {
         "books": len(books_data),
