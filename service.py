@@ -201,7 +201,14 @@ def checkout(book_id, reader_id):
             and r["status"] == "waiting"
         ]
         if waiting_res:
-            detail = f"读者 {reader_id} 在等待队列中，尚未轮到借出，不可越过队首"
+            all_active = sorted(
+                [r for r in reservations if r["book_id"] == book_id
+                 and r["status"] in ("available", "waiting")],
+                key=lambda r: r["created_at"],
+            )
+            next_reader = all_active[0]["reader_id"] if all_active else None
+            detail = (f"读者 {reader_id} 在等待队列中，尚未轮到借出，"
+                      f"不可越过队首。当前队首应借出的读者是 {next_reader}")
         else:
             detail = f"读者 {reader_id} 对书目 {book_id} 没有待取的预约记录"
         _log("checkout", False, reader_id=reader_id, book_id=book_id, detail=detail)
@@ -349,10 +356,13 @@ def export_queue(book_id):
     if not book:
         return None, f"书目 {book_id} 不存在"
     queue = get_queue(book_id)
+    history = get_logs(book_id=book_id, limit=1000000)
+    history.sort(key=lambda l: l["timestamp"])
     snapshot = {
         "export_time": _now(),
         "book": book,
         "queue": queue,
         "total_in_queue": len(queue),
+        "history": history,
     }
     return snapshot, None
