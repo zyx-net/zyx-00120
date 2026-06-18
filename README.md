@@ -65,6 +65,12 @@ python demo5.py
 python demo6.py
 ```
 
+快照迁移扎实版回归测试（覆盖日志混入字符串/缺字段/类型错/时间乱序/引用不存在/重复log_id + 预检dry-run正式导入口径一致 + 导出预检导入链路 + 重启后重复提交 + 配置切换后重跑 + 混合有效无效日志与预约黑名单冲突同时出现 + 队列顺序/可借状态/日志过滤/黑名单不漂移）：
+
+```bash
+python demo7.py
+```
+
 ## 数据文件位置
 
 所有持久化数据以 UTF-8 JSON 格式存储在项目目录下的 `data/` 文件夹，服务重启后完整恢复。
@@ -1089,3 +1095,85 @@ python demo6.py
 | 队列顺序一致 | ❌（仅配置） | ✅ |
 | 可借状态一致 | ❌（仅配置） | ✅ |
 | 适用场景 | 馆藏配置批量导入 | **完整环境迁移** |
+
+---
+
+## 本次新增要点（对应 v2.2）
+
+**快照迁移扎实话 - 统一校验 + 日志健壮性 + 完整链路一致**
+
+### 1. 预检、dry-run、正式导入 100% 共用一套校验逻辑
+三方都调用同一个 `_analyze_snapshot_conflicts` 函数，返回值完全一致：
+- 不会出现"预检 500 但 dry-run 说可导入"的口径差
+- 不会出现"dry-run 通过但正式导入马上失败"的口径差
+- 预检用 `can_import` 字段标示，dry-run/正式导入用 HTTP 400（格式错）或 409（冲突）标示，语义等价
+
+### 2. 新增 `_validate_snapshot_log` - 单条日志完整校验
+
+**必填字段**：`timestamp`、`action`、`success`
+
+**单条日志错误码（format_errors 中）**：
+
+| 错误码 | 含义 | 阻断当前日志 | 阻断其他块 |
+|--------|------|-------------|-----------|
+| `log_not_object` | 日志记录不是 JSON 对象（如字符串/数字混入） | ✅ 本条不导入 | ❌ 不影响 |
+| `log_missing_field` | 缺少必填字段（timestamp/action/success） | ✅ 本条不导入 | ❌ 不影响 |
+| `log_invalid_action_type` | action 不是非空字符串 | ✅ 本条不导入 | ❌ 不影响 |
+| `log_invalid_success_type` | success 不是布尔值（true/false） | ✅ 本条不导入 | ❌ 不影响 |
+| `log_invalid_timestamp_type` | timestamp 不是非空字符串 | ✅ 本条不导入 | ❌ 不影响 |
+| `log_invalid_timestamp_format` | timestamp 不是合法 ISO 格式 | ✅ 本条不导入 | ❌ 不影响 |
+| `log_invalid_log_id_type` | log_id 不是非空字符串 | ✅ 本条不导入 | ❌ 不影响 |
+| `log_invalid_book_id_type` | book_id 不是非空字符串 | ✅ 本条不导入 | ❌ 不影响 |
+| `log_invalid_reader_id_type` | reader_id 不是非空字符串 | ✅ 本条不导入 | ❌ 不影响 |
+| `log_invalid_detail_type` | detail 不是字符串 | ✅ 本条不导入 | ❌ 不影响 |
+
+**返回结构**（每条 format_error）：
+```json
+{
+  "index": 3,
+  "field": "success",
+  "error_code": "log_invalid_success_type",
+  "message": "日志记录 3 success 必须是布尔值（true/false），实际类型: str",
+  "blocks_other_blocks": false,
+  "blocks_current_block": true
+}
+```
+
+### 3. 新增 `_check_log_order_and_references` - 日志块级告警（非阻断）
+
+**issues 中返回的日志问题类型**：
+
+| issue 类型 | 含义 | 阻断当前日志块 | 阻断其他块 |
+|-----------|------|--------------|-----------|
+| `log_timestamp_out_of_order` | 相邻两条日志 timestamp 顺序错乱（倒序） | ❌ 依然导入 | ❌ 不影响 |
+| `log_references_missing_book` | 日志的 book_id 既不在快照 books 中，也不在目标环境 store 中 | ❌ 依然导入 | ❌ 不影响 |
+| `duplicate_log_id_in_snapshot` | 快照中出现重复的 log_id | ❌ 依然导入 | ❌ 不影响 |
+
+**阻断语义说明**：
+- `blocks_other_blocks=true`：会影响书目/预约/黑名单/日志其他三大块导入
+- `blocks_current_block=true`：仅本条记录不导入，同块其他记录仍然正常
+- 所有日志级错误都是**非全局阻断**：不会影响书目、预约、黑名单块的正常导入
+
+### 4. 预检接口永不返回 HTTP 500
+- 内部异常全部被 try-except 捕获，转为 `status: "internal_error"` 的预检报告
+- 始终返回 HTTP 200 + `ok:true`，错误细节在 `data.details.*.format_errors/issues` 内
+
+### 5. 事务一致性保证
+- **dry-run**：绝对不写库。只校验，不调用任何 save/backup 接口
+- **正式导入格式错**：直接返回 error 列表，不进入写库分支
+- **正式导入冲突**：直接返回 conflicts 列表，不进入写库分支
+- **正式导入写库中异常**：用 `backup_all()` 备份，异常时 `restore_all()` 完整回滚，书目/预约/黑名单/日志四块一同还原
+
+### 6. 成功后数据无漂移
+- **队列顺序**：按 `created_at` 升序，导入前后完全一致，重启后不变
+- **可借状态**：`available_copies = total_copies - borrowed - available`，结果与源环境一致
+- **日志过滤**：按 `book_id`/`reader_id` 查询，源环境与导入环境 log_id 集合完全相等（不多不少）
+- **无串味日志**：导入/预检汇总日志不带 `book_id`/`reader_id`，不会被条件过滤命中
+- **黑名单**：reader_id 集合与原因，导入前后完全一致
+
+### 7. 覆盖的关键链路
+1. **导出 → 预检 → dry-run → 正式导入 → 重启验证**：队列/状态/日志/黑名单一致
+2. **服务重启后重复提交**：冲突检测有效，回滚完整
+3. **配置切换后重跑**：新增书目可正常导入，原有数据不被影响
+4. **混合有效/无效日志 + 预约/黑名单冲突**：三方口径一致，错误明细完整
+5. **各种日志异常场景**：字符串混入/缺字段/类型错/时间乱序/引用不存在/重复 log_id

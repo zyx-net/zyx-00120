@@ -699,16 +699,216 @@ def _validate_snapshot_book(book_data, idx):
     return _validate_book_config(book_data, idx)
 
 
+_VALID_LOG_ACTIONS = {
+    "add_book", "update_book", "delete_book",
+    "reserve", "cancel", "checkout", "return",
+    "promote", "expire",
+    "blacklist_add", "blacklist_remove",
+    "import_collection", "import_collection_dry_run", "import_book",
+    "export_collection",
+    "import_snapshot", "import_snapshot_dry_run", "export_snapshot", "precheck_snapshot",
+}
+
+
+def _validate_snapshot_log(log_data, idx):
+    errors = []
+
+    if not isinstance(log_data, dict):
+        errors.append({
+            "index": idx,
+            "field": None,
+            "error_code": "log_not_object",
+            "message": f"日志记录 {idx} 不是有效的 JSON 对象，实际类型: {type(log_data).__name__}",
+            "blocks_other_blocks": False,
+            "blocks_current_block": True,
+        })
+        return errors
+
+    required_fields = ["timestamp", "action", "success"]
+    for field in required_fields:
+        if field not in log_data:
+            errors.append({
+                "index": idx,
+                "field": field,
+                "error_code": "log_missing_field",
+                "message": f"日志记录 {idx} 缺少必填字段: {field}",
+                "blocks_other_blocks": False,
+                "blocks_current_block": True,
+            })
+
+    if "action" in log_data:
+        if not isinstance(log_data["action"], str) or not log_data["action"].strip():
+            errors.append({
+                "index": idx,
+                "field": "action",
+                "error_code": "log_invalid_action_type",
+                "message": f"日志记录 {idx} action 必须是非空字符串，实际类型: {type(log_data['action']).__name__}",
+                "blocks_other_blocks": False,
+                "blocks_current_block": True,
+            })
+
+    if "success" in log_data:
+        if not isinstance(log_data["success"], bool):
+            errors.append({
+                "index": idx,
+                "field": "success",
+                "error_code": "log_invalid_success_type",
+                "message": f"日志记录 {idx} success 必须是布尔值（true/false），实际类型: {type(log_data['success']).__name__}",
+                "blocks_other_blocks": False,
+                "blocks_current_block": True,
+            })
+
+    if "timestamp" in log_data:
+        ts = log_data["timestamp"]
+        if not isinstance(ts, str) or not ts.strip():
+            errors.append({
+                "index": idx,
+                "field": "timestamp",
+                "error_code": "log_invalid_timestamp_type",
+                "message": f"日志记录 {idx} timestamp 必须是非空字符串（ISO 格式），实际类型: {type(ts).__name__}",
+                "blocks_other_blocks": False,
+                "blocks_current_block": True,
+            })
+        else:
+            try:
+                datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            except ValueError:
+                errors.append({
+                    "index": idx,
+                    "field": "timestamp",
+                    "error_code": "log_invalid_timestamp_format",
+                    "message": f"日志记录 {idx} timestamp 格式非法，应为 ISO 格式（如 2026-06-19T10:00:00+00:00），实际值: {ts}",
+                    "blocks_other_blocks": False,
+                    "blocks_current_block": True,
+                })
+
+    if "log_id" in log_data and log_data["log_id"] is not None:
+        if not isinstance(log_data["log_id"], str) or not log_data["log_id"].strip():
+            errors.append({
+                "index": idx,
+                "field": "log_id",
+                "error_code": "log_invalid_log_id_type",
+                "message": f"日志记录 {idx} log_id 必须是非空字符串或不提供，实际类型: {type(log_data['log_id']).__name__}",
+                "blocks_other_blocks": False,
+                "blocks_current_block": True,
+            })
+
+    if "book_id" in log_data and log_data["book_id"] is not None:
+        if not isinstance(log_data["book_id"], str) or not log_data["book_id"].strip():
+            errors.append({
+                "index": idx,
+                "field": "book_id",
+                "error_code": "log_invalid_book_id_type",
+                "message": f"日志记录 {idx} book_id 必须是非空字符串或不提供，实际类型: {type(log_data['book_id']).__name__}",
+                "blocks_other_blocks": False,
+                "blocks_current_block": True,
+            })
+
+    if "reader_id" in log_data and log_data["reader_id"] is not None:
+        if not isinstance(log_data["reader_id"], str) or not log_data["reader_id"].strip():
+            errors.append({
+                "index": idx,
+                "field": "reader_id",
+                "error_code": "log_invalid_reader_id_type",
+                "message": f"日志记录 {idx} reader_id 必须是非空字符串或不提供，实际类型: {type(log_data['reader_id']).__name__}",
+                "blocks_other_blocks": False,
+                "blocks_current_block": True,
+            })
+
+    if "detail" in log_data and log_data["detail"] is not None:
+        if not isinstance(log_data["detail"], str):
+            errors.append({
+                "index": idx,
+                "field": "detail",
+                "error_code": "log_invalid_detail_type",
+                "message": f"日志记录 {idx} detail 必须是字符串或不提供，实际类型: {type(log_data['detail']).__name__}",
+                "blocks_other_blocks": False,
+                "blocks_current_block": True,
+            })
+
+    return errors
+
+
+def _check_log_order_and_references(valid_logs, book_ids_in_snapshot):
+    issues = []
+
+    if len(valid_logs) >= 2:
+        prev_ts = None
+        prev_idx = None
+        for idx, log in enumerate(valid_logs):
+            ts_str = log.get("timestamp", "")
+            try:
+                curr_ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                continue
+            if prev_ts is not None and curr_ts < prev_ts:
+                issues.append({
+                    "type": "log_timestamp_out_of_order",
+                    "index": idx,
+                    "field": "timestamp",
+                    "previous_index": prev_idx,
+                    "previous_timestamp": valid_logs[prev_idx].get("timestamp"),
+                    "current_timestamp": ts_str,
+                    "message": (f"日志记录 {idx} 的 timestamp ({ts_str}) "
+                                f"早于前一条记录 {prev_idx} 的 timestamp ({valid_logs[prev_idx].get('timestamp')})，"
+                                f"时间顺序错乱"),
+                    "blocks_other_blocks": False,
+                    "blocks_current_block": False,
+                })
+            prev_ts = curr_ts
+            prev_idx = idx
+
+    for idx, log in enumerate(valid_logs):
+        book_id = log.get("book_id")
+        if book_id and book_id not in book_ids_in_snapshot:
+            existing_in_store = store.load_book(book_id) is not None
+            if not existing_in_store:
+                issues.append({
+                    "type": "log_references_missing_book",
+                    "index": idx,
+                    "field": "book_id",
+                    "book_id": book_id,
+                    "message": (f"日志记录 {idx} 引用了书目 {book_id}，"
+                                f"但该书目既不在快照的 books 列表中，也不存在于目标环境中"),
+                    "blocks_other_blocks": False,
+                    "blocks_current_block": False,
+                })
+
+    seen_log_ids = {}
+    for idx, log in enumerate(valid_logs):
+        log_id = log.get("log_id")
+        if log_id is None or not log_id:
+            continue
+        if log_id in seen_log_ids:
+            prev_idx = seen_log_ids[log_id]
+            issues.append({
+                "type": "duplicate_log_id_in_snapshot",
+                "index": idx,
+                "previous_index": prev_idx,
+                "log_id": log_id,
+                "message": f"快照中存在重复的 log_id: {log_id}（同时出现在记录 {prev_idx} 和 {idx}）",
+                "blocks_other_blocks": False,
+                "blocks_current_block": False,
+            })
+        else:
+            seen_log_ids[log_id] = idx
+
+    return issues
+
+
 def _analyze_snapshot_conflicts(snapshot_data):
     conflicts = []
     validation_errors = []
     format_errors = {"books": [], "active_reservations": [], "blacklist": [], "logs": []}
+    log_issues = []
 
     if not isinstance(snapshot_data, dict):
-        return None, [], ["快照数据格式错误，应为 JSON 对象"], format_errors
+        return (None, [], ["快照数据格式错误，应为 JSON 对象"],
+                format_errors, log_issues)
 
     if snapshot_data.get("version") != "2.0" or snapshot_data.get("type") != "full_snapshot":
-        return None, [], ["快照格式版本不支持，需要 version=2.0 且 type=full_snapshot"], format_errors
+        return (None, [], ["快照格式版本不支持，需要 version=2.0 且 type=full_snapshot"],
+                format_errors, log_issues)
 
     books_data = snapshot_data.get("books", [])
     reservations_data = snapshot_data.get("active_reservations", [])
@@ -716,37 +916,71 @@ def _analyze_snapshot_conflicts(snapshot_data):
     logs_data = snapshot_data.get("logs", [])
 
     if not isinstance(books_data, list):
-        return None, [], ["books 必须是列表"], format_errors
+        return (None, [], ["books 必须是列表"], format_errors, log_issues)
     if not isinstance(reservations_data, list):
-        return None, [], ["active_reservations 必须是列表"], format_errors
+        return (None, [], ["active_reservations 必须是列表"], format_errors, log_issues)
     if not isinstance(blacklist_data, list):
-        return None, [], ["blacklist 必须是列表"], format_errors
+        return (None, [], ["blacklist 必须是列表"], format_errors, log_issues)
     if not isinstance(logs_data, list):
-        return None, [], ["logs 必须是列表"], format_errors
+        return (None, [], ["logs 必须是列表"], format_errors, log_issues)
 
     for idx, book_data in enumerate(books_data):
         errors = _validate_snapshot_book(book_data, idx)
         if errors:
             validation_errors.extend(errors)
-            format_errors["books"].extend(errors)
+            for e in errors:
+                format_errors["books"].append({
+                    "index": idx,
+                    "field": None,
+                    "error_code": "book_format_error",
+                    "message": e,
+                    "blocks_other_blocks": False,
+                    "blocks_current_block": True,
+                })
 
     for idx, res_data in enumerate(reservations_data):
         errors = _validate_snapshot_reservation(res_data, idx)
         if errors:
             validation_errors.extend(errors)
-            format_errors["active_reservations"].extend(errors)
+            for e in errors:
+                format_errors["active_reservations"].append({
+                    "index": idx,
+                    "field": None,
+                    "error_code": "reservation_format_error",
+                    "message": e,
+                    "blocks_other_blocks": False,
+                    "blocks_current_block": True,
+                })
 
     for idx, bl_data in enumerate(blacklist_data):
         errors = _validate_snapshot_blacklist(bl_data, idx)
         if errors:
             validation_errors.extend(errors)
-            format_errors["blacklist"].extend(errors)
+            for e in errors:
+                format_errors["blacklist"].append({
+                    "index": idx,
+                    "field": None,
+                    "error_code": "blacklist_format_error",
+                    "message": e,
+                    "blocks_other_blocks": False,
+                    "blocks_current_block": True,
+                })
 
-    if validation_errors:
-        return None, [], validation_errors, format_errors
+    valid_logs = []
+    for idx, log_data in enumerate(logs_data):
+        errors = _validate_snapshot_log(log_data, idx)
+        if errors:
+            format_errors["logs"].extend(errors)
+            validation_errors.extend([e["message"] for e in errors])
+        else:
+            valid_logs.append(log_data)
 
     seen_book_ids = set()
     for idx, book_data in enumerate(books_data):
+        if format_errors["books"] and any(
+            fe.get("index") == idx for fe in format_errors["books"]
+        ):
+            continue
         book_id = book_data["book_id"]
         if book_id in seen_book_ids:
             conflicts.append({
@@ -771,9 +1005,24 @@ def _analyze_snapshot_conflicts(snapshot_data):
             })
 
     book_ids_in_snapshot = {b["book_id"] for b in books_data}
+    if format_errors["books"]:
+        valid_book_ids = set()
+        for idx, book_data in enumerate(books_data):
+            has_error = any(fe.get("index") == idx for fe in format_errors["books"])
+            if not has_error:
+                valid_book_ids.add(book_data["book_id"])
+        book_ids_in_snapshot = valid_book_ids
+
+    log_issues = _check_log_order_and_references(valid_logs, book_ids_in_snapshot)
+    if log_issues:
+        validation_errors.extend([li["message"] for li in log_issues])
 
     seen_res_keys = set()
     for idx, res_data in enumerate(reservations_data):
+        if format_errors["active_reservations"] and any(
+            fe.get("index") == idx for fe in format_errors["active_reservations"]
+        ):
+            continue
         book_id = res_data["book_id"]
         reader_id = res_data["reader_id"]
         res_key = (book_id, reader_id)
@@ -825,6 +1074,10 @@ def _analyze_snapshot_conflicts(snapshot_data):
 
     seen_reader_ids = set()
     for idx, bl_data in enumerate(blacklist_data):
+        if format_errors["blacklist"] and any(
+            fe.get("index") == idx for fe in format_errors["blacklist"]
+        ):
+            continue
         reader_id = bl_data["reader_id"]
         if reader_id in seen_reader_ids:
             conflicts.append({
@@ -861,7 +1114,7 @@ def _analyze_snapshot_conflicts(snapshot_data):
                     "message": f"目标环境已存在黑名单 {reader_id}",
                 })
 
-    return {
+    return ({
         "books": books_data,
         "active_reservations": reservations_data,
         "blacklist": blacklist_data,
@@ -870,11 +1123,38 @@ def _analyze_snapshot_conflicts(snapshot_data):
         "seen_book_ids": seen_book_ids,
         "seen_res_keys": seen_res_keys,
         "seen_reader_ids": seen_reader_ids,
-    }, conflicts, None, format_errors
+        "valid_log_count": len(valid_logs),
+    }, conflicts, None, format_errors, log_issues)
 
 
 def precheck_snapshot(snapshot_data):
-    parsed, conflicts, errors, format_errors = _analyze_snapshot_conflicts(snapshot_data)
+    try:
+        parsed, conflicts, errors, format_errors, log_issues = _analyze_snapshot_conflicts(snapshot_data)
+    except Exception as e:
+        error_result = {
+            "dry_run": True,
+            "can_import": False,
+            "summary": {
+                "status": "internal_error",
+                "total_format_errors": 1,
+                "total_conflicts": 0,
+                "total_will_add": 0,
+                "total_missing_dependencies": 0,
+                "message": f"预检过程中发生内部错误（已捕获，不影响服务稳定性）：{str(e)}",
+            },
+            "details": {
+                "books": {"will_add": [], "conflicts": [], "missing_dependencies": [], "format_errors": [
+                    {"index": None, "field": None, "error_code": "precheck_internal_error",
+                     "message": f"内部异常: {str(e)}", "blocks_other_blocks": True, "blocks_current_block": True}
+                ]},
+                "active_reservations": {"will_add": [], "conflicts": [], "missing_dependencies": [], "format_errors": []},
+                "blacklist": {"will_add": [], "conflicts": [], "missing_dependencies": [], "format_errors": []},
+                "logs": {"will_add": [], "conflicts": [], "missing_dependencies": [], "format_errors": []},
+            },
+        }
+        _log("precheck_snapshot", False,
+             detail=f"预检内部异常: {str(e)}")
+        return error_result, None
 
     result = {
         "dry_run": True,
@@ -886,41 +1166,48 @@ def precheck_snapshot(snapshot_data):
                 "conflicts": [],
                 "missing_dependencies": [],
                 "format_errors": [],
+                "issues": [],
             },
             "active_reservations": {
                 "will_add": [],
                 "conflicts": [],
                 "missing_dependencies": [],
                 "format_errors": [],
+                "issues": [],
             },
             "blacklist": {
                 "will_add": [],
                 "conflicts": [],
                 "missing_dependencies": [],
                 "format_errors": [],
+                "issues": [],
             },
             "logs": {
                 "will_add": [],
                 "conflicts": [],
                 "missing_dependencies": [],
                 "format_errors": [],
+                "issues": [],
             },
         },
     }
 
-    if errors:
+    for sec in ["books", "active_reservations", "blacklist", "logs"]:
+        result["details"][sec]["format_errors"] = format_errors.get(sec, [])
+    result["details"]["logs"]["issues"] = log_issues if log_issues else []
+
+    if errors and parsed is None:
+        total_fe = sum(len(v) for v in format_errors.values()) + (len(log_issues) if log_issues else 0)
         result["summary"] = {
             "status": "format_error",
-            "total_format_errors": len(errors),
+            "total_format_errors": total_fe,
             "total_conflicts": 0,
             "total_will_add": 0,
             "total_missing_dependencies": 0,
-            "message": "快照格式有误，无法进行完整预检",
+            "message": "快照顶层格式有误（非字典或版本号不对），无法进行完整预检",
         }
-        for section in ["books", "active_reservations", "blacklist"]:
-            result["details"][section]["format_errors"] = format_errors.get(section, [])
         _log("precheck_snapshot", False,
-             detail=f"预检失败：{len(errors)} 个格式错误")
+             detail=f"预检失败：{total_fe} 个顶层格式错误")
         return result, None
 
     books_data = parsed["books"]
@@ -934,7 +1221,11 @@ def precheck_snapshot(snapshot_data):
         if c["section"] == "books" and c["type"] in ("duplicate_book_id", "duplicate_book_id_in_snapshot"):
             conflict_book_ids.add(c["book_id"])
 
-    for book in books_data:
+    bad_book_indices = {fe["index"] for fe in format_errors.get("books", [])}
+
+    for idx, book in enumerate(books_data):
+        if idx in bad_book_indices:
+            continue
         book_id = book["book_id"]
         if book_id in conflict_book_ids:
             continue
@@ -955,7 +1246,11 @@ def precheck_snapshot(snapshot_data):
             else:
                 conflict_res_keys.add((c["book_id"], c["reader_id"]))
 
-    for res in reservations_data:
+    bad_res_indices = {fe["index"] for fe in format_errors.get("active_reservations", [])}
+
+    for idx, res in enumerate(reservations_data):
+        if idx in bad_res_indices:
+            continue
         res_key = (res["book_id"], res["reader_id"])
         if res["book_id"] not in book_ids_in_snapshot:
             continue
@@ -974,7 +1269,11 @@ def precheck_snapshot(snapshot_data):
         if c["section"] == "blacklist":
             conflict_reader_ids.add(c["reader_id"])
 
-    for bl in blacklist_data:
+    bad_bl_indices = {fe["index"] for fe in format_errors.get("blacklist", [])}
+
+    for idx, bl in enumerate(blacklist_data):
+        if idx in bad_bl_indices:
+            continue
         reader_id = bl["reader_id"]
         if reader_id in conflict_reader_ids:
             continue
@@ -984,7 +1283,11 @@ def precheck_snapshot(snapshot_data):
             "added_at": bl.get("added_at", ""),
         })
 
-    for log in logs_data:
+    bad_log_indices = {fe["index"] for fe in format_errors.get("logs", [])}
+
+    for idx, log in enumerate(logs_data):
+        if idx in bad_log_indices:
+            continue
         result["details"]["logs"]["will_add"].append({
             "log_id": log.get("log_id", "(auto-generated)"),
             "action": log.get("action", "unknown"),
@@ -1009,15 +1312,17 @@ def precheck_snapshot(snapshot_data):
     total_conflicts = sum(len(result["details"][s]["conflicts"]) for s in result["details"])
     total_missing = sum(len(result["details"][s]["missing_dependencies"]) for s in result["details"])
     total_format_errors = sum(len(result["details"][s]["format_errors"]) for s in result["details"])
+    total_issues = sum(len(result["details"][s].get("issues", [])) for s in result["details"])
+    total_all_errors = total_format_errors + total_issues
 
-    can_import = total_conflicts == 0 and total_missing == 0 and total_format_errors == 0
+    can_import = total_conflicts == 0 and total_missing == 0 and total_all_errors == 0
 
     if can_import:
         status = "ready"
         message = "预检通过，可以安全导入"
-    elif total_format_errors > 0:
+    elif total_format_errors > 0 or total_issues > 0:
         status = "format_error"
-        message = "存在格式错误，需先修正数据格式"
+        message = "存在格式错误或日志问题，需先修正数据格式"
     elif total_conflicts > 0:
         status = "has_conflicts"
         message = "存在冲突，需解决冲突后再导入"
@@ -1033,30 +1338,35 @@ def precheck_snapshot(snapshot_data):
         "total_conflicts": total_conflicts,
         "total_missing_dependencies": total_missing,
         "total_format_errors": total_format_errors,
+        "total_log_issues": total_issues,
         "breakdown": {
             "books": {
                 "will_add": len(result["details"]["books"]["will_add"]),
                 "conflicts": len(result["details"]["books"]["conflicts"]),
                 "missing_dependencies": len(result["details"]["books"]["missing_dependencies"]),
                 "format_errors": len(result["details"]["books"]["format_errors"]),
+                "issues": len(result["details"]["books"].get("issues", [])),
             },
             "active_reservations": {
                 "will_add": len(result["details"]["active_reservations"]["will_add"]),
                 "conflicts": len(result["details"]["active_reservations"]["conflicts"]),
                 "missing_dependencies": len(result["details"]["active_reservations"]["missing_dependencies"]),
                 "format_errors": len(result["details"]["active_reservations"]["format_errors"]),
+                "issues": len(result["details"]["active_reservations"].get("issues", [])),
             },
             "blacklist": {
                 "will_add": len(result["details"]["blacklist"]["will_add"]),
                 "conflicts": len(result["details"]["blacklist"]["conflicts"]),
                 "missing_dependencies": len(result["details"]["blacklist"]["missing_dependencies"]),
                 "format_errors": len(result["details"]["blacklist"]["format_errors"]),
+                "issues": len(result["details"]["blacklist"].get("issues", [])),
             },
             "logs": {
                 "will_add": len(result["details"]["logs"]["will_add"]),
                 "conflicts": len(result["details"]["logs"]["conflicts"]),
                 "missing_dependencies": len(result["details"]["logs"]["missing_dependencies"]),
                 "format_errors": len(result["details"]["logs"]["format_errors"]),
+                "issues": len(result["details"]["logs"].get("issues", [])),
             },
         },
         "queue_order_check": _check_queue_order(reservations_data, book_ids_in_snapshot),
@@ -1064,7 +1374,7 @@ def precheck_snapshot(snapshot_data):
     }
 
     _log("precheck_snapshot", can_import,
-         detail=f"预检完成：状态={status}, 可添加={total_will_add}, 冲突={total_conflicts}, 缺依赖={total_missing}")
+         detail=f"预检完成：状态={status}, 可添加={total_will_add}, 冲突={total_conflicts}, 缺依赖={total_missing}, 格式错={total_format_errors}, 日志问题={total_issues}")
 
     return result, None
 
@@ -1108,9 +1418,25 @@ def _check_availability(books_data, reservations_data):
 
 
 def import_snapshot(snapshot_data, dry_run=False):
-    parsed, conflicts, errors, _ = _analyze_snapshot_conflicts(snapshot_data)
-    if errors:
+    try:
+        parsed, conflicts, errors, format_errors, log_issues = _analyze_snapshot_conflicts(snapshot_data)
+    except Exception as e:
+        return None, None, [f"快照数据解析异常: {str(e)}"]
+
+    total_format_errors = sum(len(v) for v in format_errors.values()) if format_errors else 0
+    total_log_issues = len(log_issues) if log_issues else 0
+
+    if errors and parsed is None:
         return None, None, errors
+
+    if total_format_errors > 0 or total_log_issues > 0:
+        format_err_messages = []
+        for sec, fe_list in format_errors.items():
+            for fe in fe_list:
+                format_err_messages.append(f"[{sec}] {fe.get('message', str(fe))}")
+        for li in (log_issues or []):
+            format_err_messages.append(f"[logs] {li.get('message', str(li))}")
+        return None, None, format_err_messages
 
     if conflicts:
         if dry_run:
@@ -1174,11 +1500,14 @@ def import_snapshot(snapshot_data, dry_run=False):
 
             all_logs = store.load_logs()
             for log_entry in logs_data:
-                if "log_id" not in log_entry:
-                    log_entry["log_id"] = str(uuid.uuid4())
-                if "timestamp" not in log_entry:
-                    log_entry["timestamp"] = _now()
-                all_logs.append(log_entry)
+                if not isinstance(log_entry, dict):
+                    raise RuntimeError(f"日志记录不是字典: {type(log_entry).__name__}")
+                entry = dict(log_entry)
+                if "log_id" not in entry or not entry.get("log_id"):
+                    entry["log_id"] = str(uuid.uuid4())
+                if "timestamp" not in entry or not entry.get("timestamp"):
+                    entry["timestamp"] = _now()
+                all_logs.append(entry)
             store.save_all_logs(all_logs)
 
         except Exception as e:
