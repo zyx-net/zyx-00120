@@ -19,19 +19,5 @@
     "total_copies": 2,
     "borrow_days": 21,
     "retain_hours": 6
-  },
-  {
-    "book_id": "RVW-PERSIST-01",
-    "title": "Reviewer Persist One",
-    "total_copies": 4,
-    "borrow_days": 21,
-    "retain_hours": 12
-  },
-  {
-    "book_id": "RVW-PERSIST-02",
-    "title": "Reviewer Persist Two",
-    "total_copies": 1,
-    "borrow_days": 7,
-    "retain_hours": 1
   }
 ]

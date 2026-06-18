@@ -144,3 +144,54 @@ def load_logs():
 def _now():
     from datetime import datetime, timezone
     return datetime.now(timezone.utc).isoformat()
+
+
+def replace_all(name, data):
+    with _lock:
+        save(name, data)
+
+
+def backup_all():
+    with _lock:
+        return {
+            "books": load("books"),
+            "reservations": load("reservations"),
+            "blacklist": load("blacklist"),
+            "logs": load("logs"),
+        }
+
+
+def restore_all(backup):
+    with _lock:
+        save("books", backup["books"])
+        save("reservations", backup["reservations"])
+        save("blacklist", backup["blacklist"])
+        save("logs", backup["logs"])
+
+
+def load_active_reservations():
+    reservations = load_reservations()
+    return [
+        r for r in reservations
+        if r["status"] in ("waiting", "available", "borrowed")
+    ]
+
+
+def save_all_reservations(reservations):
+    with _lock:
+        save_reservations(reservations)
+
+
+def save_all_books(books):
+    with _lock:
+        save("books", books)
+
+
+def save_all_blacklist(blacklist):
+    with _lock:
+        save_blacklist(blacklist)
+
+
+def save_all_logs(logs):
+    with _lock:
+        save("logs", logs)

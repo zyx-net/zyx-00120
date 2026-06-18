@@ -189,6 +189,35 @@ def api_import_collection():
     }), 200 if not dry_run else 200
 
 
+@app.route("/api/snapshot/export", methods=["GET"])
+def api_export_snapshot():
+    snapshot, err = service.export_snapshot()
+    if err:
+        return jsonify({"ok": False, "error": err}), 500
+    return jsonify({"ok": True, "data": snapshot}), 200
+
+
+@app.route("/api/snapshot/import", methods=["POST"])
+def api_import_snapshot():
+    d = request.get_json(force=True)
+    dry_run = request.args.get("dry_run", "false").lower() == "true"
+    imported_counts, conflicts, errors = service.import_snapshot(d, dry_run=dry_run)
+    if errors:
+        return jsonify({"ok": False, "error": errors}), 400
+    if conflicts:
+        return jsonify({
+            "ok": False,
+            "error": "快照导入存在冲突",
+            "conflicts": conflicts,
+            "dry_run": dry_run,
+        }), 409
+    return jsonify({
+        "ok": True,
+        "imported_counts": imported_counts,
+        "dry_run": dry_run,
+    }), 200
+
+
 @app.route("/api/expire", methods=["POST"])
 def api_trigger_expire():
     count = service.process_expired()

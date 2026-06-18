@@ -600,3 +600,351 @@ def import_collection(import_data, dry_run=False):
 
     _log("import_collection", True, detail=f"成功批量导入 {len(saved_books)} 本书")
     return len(saved_books), None, None
+
+
+def export_snapshot():
+    books = store.list_books()
+    books_sorted = sorted(books, key=lambda b: b["book_id"])
+
+    active_reservations = store.load_active_reservations()
+    active_reservations_sorted = sorted(
+        active_reservations,
+        key=lambda r: (r["book_id"], r["created_at"])
+    )
+
+    blacklist = store.load_blacklist()
+    blacklist_sorted = sorted(blacklist, key=lambda b: b["reader_id"])
+
+    book_ids_in_snapshot = {b["book_id"] for b in books_sorted}
+    logs_for_snapshot = []
+    all_logs = store.load_logs()
+    for log in all_logs:
+        if log.get("book_id") and log["book_id"] in book_ids_in_snapshot:
+            logs_for_snapshot.append(log)
+        elif log.get("action") in ("import_snapshot", "export_snapshot",
+                                   "blacklist_add", "blacklist_remove"):
+            logs_for_snapshot.append(log)
+    logs_for_snapshot_sorted = sorted(logs_for_snapshot, key=lambda l: l["timestamp"])
+
+    snapshot = {
+        "export_time": _now(),
+        "version": "2.0",
+        "type": "full_snapshot",
+        "counts": {
+            "books": len(books_sorted),
+            "active_reservations": len(active_reservations_sorted),
+            "blacklist": len(blacklist_sorted),
+            "logs": len(logs_for_snapshot_sorted),
+        },
+        "books": books_sorted,
+        "active_reservations": active_reservations_sorted,
+        "blacklist": blacklist_sorted,
+        "logs": logs_for_snapshot_sorted,
+    }
+
+    _log("export_snapshot", True,
+         detail=f"导出完整快照：{len(books_sorted)} 本书，{len(active_reservations_sorted)} 条活跃预约，"
+                f"{len(blacklist_sorted)} 条黑名单，{len(logs_for_snapshot_sorted)} 条日志")
+    return snapshot, None
+
+
+def _validate_snapshot_reservation(res_data, idx):
+    errors = []
+    required_fields = [
+        "reservation_id", "book_id", "reader_id", "status",
+        "created_at", "available_at", "expire_at",
+        "borrowed_at", "returned_at",
+    ]
+    for field in required_fields:
+        if field not in res_data:
+            errors.append(f"预约记录 {idx} 缺少必填字段: {field}")
+
+    if "status" in res_data and res_data["status"] not in ("waiting", "available", "borrowed"):
+        errors.append(f"预约记录 {idx} 状态 {res_data['status']} 不是活跃状态（仅允许 waiting/available/borrowed）")
+
+    if "reservation_id" in res_data:
+        if not isinstance(res_data["reservation_id"], str) or not res_data["reservation_id"].strip():
+            errors.append(f"预约记录 {idx} reservation_id 必须是非空字符串")
+
+    if "book_id" in res_data:
+        if not isinstance(res_data["book_id"], str) or not res_data["book_id"].strip():
+            errors.append(f"预约记录 {idx} book_id 必须是非空字符串")
+
+    if "reader_id" in res_data:
+        if not isinstance(res_data["reader_id"], str) or not res_data["reader_id"].strip():
+            errors.append(f"预约记录 {idx} reader_id 必须是非空字符串")
+
+    if "created_at" in res_data:
+        if not isinstance(res_data["created_at"], str) or not res_data["created_at"].strip():
+            errors.append(f"预约记录 {idx} created_at 必须是非空字符串")
+
+    return errors
+
+
+def _validate_snapshot_blacklist(bl_data, idx):
+    errors = []
+    required_fields = ["reader_id", "reason", "added_at"]
+    for field in required_fields:
+        if field not in bl_data:
+            errors.append(f"黑名单记录 {idx} 缺少必填字段: {field}")
+
+    if "reader_id" in bl_data:
+        if not isinstance(bl_data["reader_id"], str) or not bl_data["reader_id"].strip():
+            errors.append(f"黑名单记录 {idx} reader_id 必须是非空字符串")
+
+    return errors
+
+
+def _validate_snapshot_book(book_data, idx):
+    return _validate_book_config(book_data, idx)
+
+
+def import_snapshot(snapshot_data, dry_run=False):
+    conflicts = []
+    validation_errors = []
+
+    if not isinstance(snapshot_data, dict):
+        return None, None, ["快照数据格式错误，应为 JSON 对象"]
+
+    if snapshot_data.get("version") != "2.0" or snapshot_data.get("type") != "full_snapshot":
+        return None, None, ["快照格式版本不支持，需要 version=2.0 且 type=full_snapshot"]
+
+    books_data = snapshot_data.get("books", [])
+    reservations_data = snapshot_data.get("active_reservations", [])
+    blacklist_data = snapshot_data.get("blacklist", [])
+    logs_data = snapshot_data.get("logs", [])
+
+    if not isinstance(books_data, list):
+        return None, None, ["books 必须是列表"]
+    if not isinstance(reservations_data, list):
+        return None, None, ["active_reservations 必须是列表"]
+    if not isinstance(blacklist_data, list):
+        return None, None, ["blacklist 必须是列表"]
+    if not isinstance(logs_data, list):
+        return None, None, ["logs 必须是列表"]
+
+    for idx, book_data in enumerate(books_data):
+        errors = _validate_snapshot_book(book_data, idx)
+        if errors:
+            validation_errors.extend(errors)
+
+    for idx, res_data in enumerate(reservations_data):
+        errors = _validate_snapshot_reservation(res_data, idx)
+        if errors:
+            validation_errors.extend(errors)
+
+    for idx, bl_data in enumerate(blacklist_data):
+        errors = _validate_snapshot_blacklist(bl_data, idx)
+        if errors:
+            validation_errors.extend(errors)
+
+    if validation_errors:
+        return None, None, validation_errors
+
+    seen_book_ids = set()
+    for idx, book_data in enumerate(books_data):
+        book_id = book_data["book_id"]
+        if book_id in seen_book_ids:
+            conflicts.append({
+                "type": "duplicate_book_id_in_snapshot",
+                "book_id": book_id,
+                "section": "books",
+                "index": idx,
+                "message": f"快照中存在重复的 book_id: {book_id}",
+            })
+        seen_book_ids.add(book_id)
+
+        existing_book = store.load_book(book_id)
+        if existing_book:
+            conflicts.append({
+                "type": "duplicate_book_id",
+                "book_id": book_id,
+                "section": "books",
+                "index": idx,
+                "existing_config": existing_book,
+                "import_config": {k: book_data[k] for k in ["title", "total_copies", "borrow_days", "retain_hours"]},
+                "message": f"目标环境已存在书目 {book_id}",
+            })
+
+    book_ids_in_snapshot = {b["book_id"] for b in books_data}
+
+    seen_res_keys = set()
+    for idx, res_data in enumerate(reservations_data):
+        book_id = res_data["book_id"]
+        reader_id = res_data["reader_id"]
+        res_key = (book_id, reader_id)
+
+        if book_id not in book_ids_in_snapshot:
+            conflicts.append({
+                "type": "missing_dependency",
+                "book_id": book_id,
+                "reader_id": reader_id,
+                "section": "active_reservations",
+                "index": idx,
+                "message": f"预约记录引用了快照中不存在的书目 {book_id}",
+            })
+            continue
+
+        if res_key in seen_res_keys:
+            conflicts.append({
+                "type": "duplicate_reservation_in_snapshot",
+                "book_id": book_id,
+                "reader_id": reader_id,
+                "section": "active_reservations",
+                "index": idx,
+                "message": f"快照中存在重复预约：{book_id} / {reader_id}",
+            })
+        seen_res_keys.add(res_key)
+
+        existing_reservations = store.load_active_reservations()
+        for existing in existing_reservations:
+            if existing["book_id"] == book_id and existing["reader_id"] == reader_id:
+                conflicts.append({
+                    "type": "duplicate_reservation",
+                    "book_id": book_id,
+                    "reader_id": reader_id,
+                    "section": "active_reservations",
+                    "index": idx,
+                    "existing_reservation": {
+                        "reservation_id": existing["reservation_id"],
+                        "status": existing["status"],
+                        "created_at": existing["created_at"],
+                    },
+                    "import_reservation": {
+                        "reservation_id": res_data["reservation_id"],
+                        "status": res_data["status"],
+                        "created_at": res_data["created_at"],
+                    },
+                    "message": f"目标环境已存在活跃预约：{book_id} / {reader_id}",
+                })
+                break
+
+    seen_reader_ids = set()
+    for idx, bl_data in enumerate(blacklist_data):
+        reader_id = bl_data["reader_id"]
+        if reader_id in seen_reader_ids:
+            conflicts.append({
+                "type": "duplicate_blacklist_in_snapshot",
+                "reader_id": reader_id,
+                "section": "blacklist",
+                "index": idx,
+                "message": f"快照中存在重复黑名单：{reader_id}",
+            })
+        seen_reader_ids.add(reader_id)
+
+        existing_bl = store.is_blacklisted(reader_id)
+        if existing_bl:
+            existing_list = store.load_blacklist()
+            existing_entry = next((b for b in existing_list if b["reader_id"] == reader_id), None)
+            if existing_entry and existing_entry.get("reason") != bl_data.get("reason"):
+                conflicts.append({
+                    "type": "blacklist_conflict",
+                    "reader_id": reader_id,
+                    "section": "blacklist",
+                    "index": idx,
+                    "existing_entry": existing_entry,
+                    "import_entry": bl_data,
+                    "message": f"目标环境已存在黑名单 {reader_id}，但原因不同",
+                })
+            elif existing_entry:
+                conflicts.append({
+                    "type": "duplicate_blacklist",
+                    "reader_id": reader_id,
+                    "section": "blacklist",
+                    "index": idx,
+                    "existing_entry": existing_entry,
+                    "import_entry": bl_data,
+                    "message": f"目标环境已存在黑名单 {reader_id}",
+                })
+
+    if conflicts:
+        if dry_run:
+            _log("import_snapshot_dry_run", False,
+                 detail=f"DRY-RUN 快照导入发现 {len(conflicts)} 个冲突")
+        else:
+            _log("import_snapshot", False,
+                 detail=f"快照导入发现 {len(conflicts)} 个冲突，已中止")
+        return None, conflicts, None
+
+    counts = {
+        "books": len(books_data),
+        "active_reservations": len(reservations_data),
+        "blacklist": len(blacklist_data),
+        "logs": len(logs_data),
+    }
+
+    if dry_run:
+        _log("import_snapshot_dry_run", True,
+             detail=f"DRY-RUN 快照导入校验通过，可导入：{counts}")
+        return counts, None, None
+
+    with store._lock:
+        backup = store.backup_all()
+
+        try:
+            existing_books = store.list_books()
+            existing_book_ids = {b["book_id"] for b in existing_books}
+            import_book_ids = {b["book_id"] for b in books_data}
+            overlap = existing_book_ids & import_book_ids
+            if overlap:
+                raise RuntimeError(f"导入前二次校验发现冲突书目: {overlap}")
+
+            existing_active = store.load_active_reservations()
+            existing_res_keys = {(r["book_id"], r["reader_id"]) for r in existing_active}
+            import_res_keys = {(r["book_id"], r["reader_id"]) for r in reservations_data}
+            res_overlap = existing_res_keys & import_res_keys
+            if res_overlap:
+                raise RuntimeError(f"导入前二次校验发现冲突预约: {res_overlap}")
+
+            existing_bl = store.load_blacklist()
+            existing_bl_ids = {b["reader_id"] for b in existing_bl}
+            import_bl_ids = {b["reader_id"] for b in blacklist_data}
+            bl_overlap = existing_bl_ids & import_bl_ids
+            if bl_overlap:
+                raise RuntimeError(f"导入前二次校验发现冲突黑名单: {bl_overlap}")
+
+            all_books = existing_books + books_data
+            store.save_all_books(all_books)
+
+            all_reservations = store.load_reservations() + reservations_data
+            store.save_all_reservations(all_reservations)
+
+            all_blacklist = existing_bl + blacklist_data
+            store.save_all_blacklist(all_blacklist)
+
+            for book_data in books_data:
+                _log("snapshot_import_book", True, book_id=book_data["book_id"],
+                     detail=f"快照导入书目: {book_data['title']}")
+
+            for res_data in reservations_data:
+                _log("snapshot_import_reservation", True,
+                     book_id=res_data["book_id"],
+                     reader_id=res_data["reader_id"],
+                     detail=f"快照导入预约: {res_data['book_id']} / {res_data['reader_id']} 状态={res_data['status']}")
+
+            for bl_data in blacklist_data:
+                _log("snapshot_import_blacklist", True,
+                     reader_id=bl_data["reader_id"],
+                     detail=f"快照导入黑名单: {bl_data['reader_id']}")
+
+            all_logs = store.load_logs()
+            for log_entry in logs_data:
+                if "log_id" not in log_entry:
+                    log_entry["log_id"] = str(uuid.uuid4())
+                if "timestamp" not in log_entry:
+                    log_entry["timestamp"] = _now()
+                all_logs.append(log_entry)
+            store.save_all_logs(all_logs)
+
+        except Exception as e:
+            store.restore_all(backup)
+            _log("import_snapshot", False,
+                 detail=f"快照导入异常，已完整回滚: {str(e)}")
+            return None, [{
+                "type": "snapshot_import_error",
+                "message": f"导入过程出错，已完整回滚所有数据: {str(e)}",
+            }], None
+
+    _log("import_snapshot", True,
+         detail=f"快照导入成功：{counts}")
+    return counts, None, None

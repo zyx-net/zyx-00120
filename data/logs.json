@@ -1,7 +1,7 @@
 [
   {
-    "log_id": "1b245bee-3326-4d9b-af3d-0fd5a23197b1",
-    "timestamp": "2026-06-18T19:20:22.435199+00:00",
+    "log_id": "f41279a0-35cb-46f0-9cb7-cff0c41c5224",
+    "timestamp": "2026-06-18T19:44:06.550477+00:00",
     "action": "import_book",
     "reader_id": null,
     "book_id": "BASE-B001",
@@ -9,8 +9,8 @@
     "success": true
   },
   {
-    "log_id": "d8cff571-a028-4aea-bca3-02928c116aa1",
-    "timestamp": "2026-06-18T19:20:22.436796+00:00",
+    "log_id": "4ab52693-a0f0-4bd6-8e3c-5cf510e788f0",
+    "timestamp": "2026-06-18T19:44:06.552163+00:00",
     "action": "import_book",
     "reader_id": null,
     "book_id": "BASE-B002",
@@ -18,8 +18,8 @@
     "success": true
   },
   {
-    "log_id": "96dfa998-5c2f-4e7c-a2f6-90bf3c295e15",
-    "timestamp": "2026-06-18T19:20:22.438144+00:00",
+    "log_id": "93028979-4ac1-4f3c-862c-f562e2b0a5b5",
+    "timestamp": "2026-06-18T19:44:06.553747+00:00",
     "action": "import_book",
     "reader_id": null,
     "book_id": "BASE-B003",
@@ -27,8 +27,8 @@
     "success": true
   },
   {
-    "log_id": "7cb4dd3f-2538-4848-92db-4fb891d82200",
-    "timestamp": "2026-06-18T19:20:22.438983+00:00",
+    "log_id": "ceb7a73d-e4bc-4189-81d2-c22acdd37252",
+    "timestamp": "2026-06-18T19:44:06.554598+00:00",
     "action": "import_collection",
     "reader_id": null,
     "book_id": null,
@@ -36,8 +36,8 @@
     "success": true
   },
   {
-    "log_id": "18a06bd2-b62a-4350-8483-8aace37c989b",
-    "timestamp": "2026-06-18T19:20:22.454555+00:00",
+    "log_id": "9f9ba122-0483-4b83-8d95-205a41dc2950",
+    "timestamp": "2026-06-18T19:44:06.573827+00:00",
     "action": "import_collection_dry_run",
     "reader_id": null,
     "book_id": null,
@@ -45,8 +45,8 @@
     "success": false
   },
   {
-    "log_id": "39301700-596c-477f-821e-c1462f72959a",
-    "timestamp": "2026-06-18T19:20:22.478153+00:00",
+    "log_id": "6a2f1ca2-e321-4e38-9a40-ba9acc7f88f6",
+    "timestamp": "2026-06-18T19:44:06.689435+00:00",
     "action": "import_collection",
     "reader_id": null,
     "book_id": null,
@@ -54,8 +54,8 @@
     "success": false
   },
   {
-    "log_id": "1927271d-0139-42ea-826e-30d2e3158f2e",
-    "timestamp": "2026-06-18T19:20:22.490765+00:00",
+    "log_id": "aeb1df26-2086-4bf9-ac39-c68b2c578dbc",
+    "timestamp": "2026-06-18T19:44:06.706806+00:00",
     "action": "reserve",
     "reader_id": "R-TEST-001",
     "book_id": "BASE-B001",
@@ -63,8 +63,8 @@
     "success": true
   },
   {
-    "log_id": "98637eed-a984-4273-abaf-b696275d80aa",
-    "timestamp": "2026-06-18T19:20:22.493873+00:00",
+    "log_id": "693386fd-46ee-4e11-8d9f-d380f00c2368",
+    "timestamp": "2026-06-18T19:44:06.710103+00:00",
     "action": "import_collection",
     "reader_id": null,
     "book_id": null,
@@ -72,8 +72,8 @@
     "success": false
   },
   {
-    "log_id": "05d110d7-f994-40db-a4fd-c8f75161cdab",
-    "timestamp": "2026-06-18T19:20:22.496956+00:00",
+    "log_id": "11f2d6ef-623c-4b47-bf32-84ac98cf2df1",
+    "timestamp": "2026-06-18T19:44:06.713764+00:00",
     "action": "import_collection",
     "reader_id": null,
     "book_id": null,
@@ -81,57 +81,12 @@
     "success": false
   },
   {
-    "log_id": "1d2c9c49-a571-430f-a38b-06da291d95aa",
-    "timestamp": "2026-06-18T19:20:24.038765+00:00",
+    "log_id": "f9de92c6-2023-4fda-8162-97ebfb721be4",
+    "timestamp": "2026-06-18T19:44:08.322573+00:00",
     "action": "import_collection_dry_run",
     "reader_id": null,
     "book_id": null,
     "detail": "DRY-RUN 发现 4 个冲突",
     "success": false
-  },
-  {
-    "log_id": "e63b8d97-16af-499d-bab5-5ff1b8e628c8",
-    "timestamp": "2026-06-18T19:21:10.023856+00:00",
-    "action": "import_collection_dry_run",
-    "reader_id": null,
-    "book_id": null,
-    "detail": "DRY-RUN 校验通过，可导入 1 本书",
-    "success": true
-  },
-  {
-    "log_id": "b83c7acc-50f4-4615-8ee8-0eafb80b61c6",
-    "timestamp": "2026-06-18T19:21:10.050982+00:00",
-    "action": "import_collection",
-    "reader_id": null,
-    "book_id": null,
-    "detail": "导入发现 1 个冲突，已回滚",
-    "success": false
-  },
-  {
-    "log_id": "de924421-76ae-4371-9139-1b9820ac32bb",
-    "timestamp": "2026-06-18T19:21:10.070825+00:00",
-    "action": "import_book",
-    "reader_id": null,
-    "book_id": "RVW-PERSIST-01",
-    "detail": "批量导入书目: Reviewer Persist One",
-    "success": true
-  },
-  {
-    "log_id": "1cf6ffb7-a2fe-4e18-850c-97c1ddf8cb76",
-    "timestamp": "2026-06-18T19:21:10.072329+00:00",
-    "action": "import_book",
-    "reader_id": null,
-    "book_id": "RVW-PERSIST-02",
-    "detail": "批量导入书目: Reviewer Persist Two",
-    "success": true
-  },
-  {
-    "log_id": "862060bc-47f5-4246-865b-42452242a1e3",
-    "timestamp": "2026-06-18T19:21:10.073146+00:00",
-    "action": "import_collection",
-    "reader_id": null,
-    "book_id": null,
-    "detail": "成功批量导入 2 本书",
-    "success": true
   }
 ]

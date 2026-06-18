@@ -1,12 +1,12 @@
 [
   {
-    "reservation_id": "ee3ef6eb-e022-45f4-bf98-08aef4529946",
+    "reservation_id": "6e58c53e-416d-4769-b182-6dede11ffaad",
     "book_id": "BASE-B001",
     "reader_id": "R-TEST-001",
     "status": "available",
-    "created_at": "2026-06-18T19:20:22.489912+00:00",
-    "available_at": "2026-06-18T19:20:22.489912+00:00",
-    "expire_at": "2026-06-19T19:20:22.489912+00:00",
+    "created_at": "2026-06-18T19:44:06.705879+00:00",
+    "available_at": "2026-06-18T19:44:06.705879+00:00",
+    "expire_at": "2026-06-19T19:44:06.705879+00:00",
     "borrowed_at": null,
     "returned_at": null
   }
