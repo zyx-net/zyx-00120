@@ -465,6 +465,38 @@ def _validate_book_config(book_data, idx):
     return errors
 
 
+def _check_book_numeric_ranges(book_data, idx):
+    conflicts = []
+    if not isinstance(book_data, dict):
+        return conflicts
+    book_id = book_data.get("book_id", f"(unknown-{idx})")
+    if isinstance(book_data.get("total_copies"), int) and book_data["total_copies"] < 1:
+        conflicts.append({
+            "type": "invalid_copies",
+            "book_id": book_id,
+            "section": "books",
+            "index": idx,
+            "message": f"书目 {book_id} 的 total_copies 非法: {book_data['total_copies']}，必须为正整数（≥1）",
+        })
+    if isinstance(book_data.get("borrow_days"), int) and book_data["borrow_days"] < 1:
+        conflicts.append({
+            "type": "invalid_borrow_days",
+            "book_id": book_id,
+            "section": "books",
+            "index": idx,
+            "message": f"书目 {book_id} 的 borrow_days 非法: {book_data['borrow_days']}，必须为正整数（≥1）",
+        })
+    if isinstance(book_data.get("retain_hours"), int) and book_data["retain_hours"] < 0:
+        conflicts.append({
+            "type": "invalid_retain_hours",
+            "book_id": book_id,
+            "section": "books",
+            "index": idx,
+            "message": f"书目 {book_id} 的 retain_hours 非法: {book_data['retain_hours']}，必须为非负整数（≥0）",
+        })
+    return conflicts
+
+
 def _has_active_reservations(book_id):
     reservations = store.load_reservations()
     active = [
@@ -523,29 +555,7 @@ def import_collection(import_data, dry_run=False):
             })
             continue
 
-        if book_data["total_copies"] <= 0:
-            conflicts.append({
-                "type": "invalid_copies",
-                "book_id": book_id,
-                "index": idx,
-                "message": f"书目 {book_id} 的 total_copies 非法: {book_data['total_copies']}，必须为正整数",
-            })
-
-        if book_data["borrow_days"] <= 0:
-            conflicts.append({
-                "type": "invalid_borrow_days",
-                "book_id": book_id,
-                "index": idx,
-                "message": f"书目 {book_id} 的 borrow_days 非法: {book_data['borrow_days']}，必须为正整数",
-            })
-
-        if book_data["retain_hours"] < 0:
-            conflicts.append({
-                "type": "invalid_retain_hours",
-                "book_id": book_id,
-                "index": idx,
-                "message": f"书目 {book_id} 的 retain_hours 非法: {book_data['retain_hours']}，必须为非负整数",
-            })
+        conflicts.extend(_check_book_numeric_ranges(book_data, idx))
 
     if validation_errors:
         return None, None, validation_errors
@@ -1004,15 +1014,30 @@ def _analyze_snapshot_conflicts(snapshot_data):
                 "import_config": {k: book_data[k] for k in ["title", "total_copies", "borrow_days", "retain_hours"]},
                 "message": f"目标环境已存在书目 {book_id}",
             })
+            continue
 
-    book_ids_in_snapshot = {b["book_id"] for b in books_data}
-    if format_errors["books"]:
-        valid_book_ids = set()
-        for idx, book_data in enumerate(books_data):
-            has_error = any(fe.get("index") == idx for fe in format_errors["books"])
-            if not has_error:
-                valid_book_ids.add(book_data["book_id"])
-        book_ids_in_snapshot = valid_book_ids
+        conflicts.extend(_check_book_numeric_ranges(book_data, idx))
+
+    _INVALID_BOOK_CONFLICT_TYPES = {
+        "duplicate_book_id_in_snapshot", "duplicate_book_id",
+        "invalid_copies", "invalid_borrow_days", "invalid_retain_hours",
+    }
+    invalid_book_indices = set()
+    invalid_book_ids = set()
+    for c in conflicts:
+        if c["section"] == "books" and c["type"] in _INVALID_BOOK_CONFLICT_TYPES:
+            if c.get("index") is not None:
+                invalid_book_indices.add(c["index"])
+            if c.get("book_id"):
+                invalid_book_ids.add(c["book_id"])
+
+    valid_book_ids = set()
+    for idx, book_data in enumerate(books_data):
+        has_format_error = any(fe.get("index") == idx for fe in format_errors["books"])
+        has_conflict = idx in invalid_book_indices
+        if not has_format_error and not has_conflict and isinstance(book_data, dict) and book_data.get("book_id"):
+            valid_book_ids.add(book_data["book_id"])
+    book_ids_in_snapshot = valid_book_ids
 
     log_issues = _check_log_order_and_references(valid_logs, book_ids_in_snapshot)
     if log_issues:
@@ -1197,10 +1222,18 @@ def _build_snapshot_report(parsed, conflicts, errors, format_errors, log_issues,
     logs_data = parsed["logs"]
     book_ids_in_snapshot = parsed["book_ids_in_snapshot"]
 
-    conflict_book_ids = set()
+    _NUMERIC_CONFLICT_TYPES = {"invalid_copies", "invalid_borrow_days", "invalid_retain_hours"}
+    _SKIP_CONFLICT_TYPES = {"duplicate_book_id", "duplicate_book_id_in_snapshot"}
+
+    skip_book_ids = set()
+    block_book_ids = set()
     for c in conflicts:
-        if c["section"] == "books" and c["type"] in ("duplicate_book_id", "duplicate_book_id_in_snapshot"):
-            conflict_book_ids.add(c["book_id"])
+        if c["section"] != "books":
+            continue
+        if c["type"] in _SKIP_CONFLICT_TYPES:
+            skip_book_ids.add(c["book_id"])
+        elif c["type"] in _NUMERIC_CONFLICT_TYPES:
+            block_book_ids.add(c["book_id"])
 
     bad_book_indices = {fe["index"] for fe in format_errors.get("books", [])}
 
@@ -1216,8 +1249,18 @@ def _build_snapshot_report(parsed, conflicts, errors, format_errors, log_issues,
                 })
             continue
         book_id = book["book_id"]
-        if book_id in conflict_book_ids:
-            c_list = [c for c in conflicts if c["section"] == "books" and c.get("book_id") == book_id]
+        if book_id in block_book_ids:
+            c_list = [c for c in conflicts if c["section"] == "books" and c.get("book_id") == book_id and c["type"] in _NUMERIC_CONFLICT_TYPES]
+            for c in c_list:
+                result["details"]["books"]["will_block"].append({
+                    "index": idx,
+                    "book_id": book_id,
+                    "reason": c.get("message", ""),
+                    "error_code": c.get("type"),
+                })
+            continue
+        if book_id in skip_book_ids:
+            c_list = [c for c in conflicts if c["section"] == "books" and c.get("book_id") == book_id and c["type"] in _SKIP_CONFLICT_TYPES]
             for c in c_list:
                 result["details"]["books"]["will_skip"].append({
                     "index": idx,
@@ -1661,6 +1704,18 @@ def import_snapshot(snapshot_data, dry_run=False):
             }], None, report
 
     batch_id = str(uuid.uuid4())
+    import_log_id = str(uuid.uuid4())
+    import_log_entry = {
+        "log_id": import_log_id,
+        "timestamp": _now(),
+        "action": "import_snapshot",
+        "reader_id": None,
+        "book_id": None,
+        "detail": f"快照导入成功：{counts}，批次ID: {batch_id}",
+        "success": True,
+    }
+    store.append_log(import_log_entry)
+
     batch = {
         "batch_id": batch_id,
         "type": "snapshot_import",
@@ -1679,12 +1734,10 @@ def import_snapshot(snapshot_data, dry_run=False):
             "blacklist": blacklist_data,
             "logs": logs_data,
         },
+        "import_log_id": import_log_id,
         "rollback_log_id": None,
     }
     store.add_batch(batch)
-
-    _log("import_snapshot", True,
-         detail=f"快照导入成功：{counts}，批次ID: {batch_id}")
     return counts, None, None, report, batch_id
 
 
@@ -1880,16 +1933,20 @@ def rollback_batch(batch_id):
                 log_id = log.get("log_id")
                 if log_id:
                     imported_log_ids.add(log_id)
+            if batch.get("import_log_id"):
+                imported_log_ids.add(batch["import_log_id"])
             new_logs = [l for l in all_logs if l.get("log_id") not in imported_log_ids]
             store.save_all_logs(new_logs)
-            rollback_count += len(details["logs"])
+            detail_log_count = len(details["logs"])
+            import_log_removed = 1 if batch.get("import_log_id") else 0
+            rollback_count += detail_log_count + import_log_removed
 
             rollback_log_id = str(uuid.uuid4())
             store.append_log({
                 "log_id": rollback_log_id,
                 "timestamp": _now(),
                 "action": "rollback_batch",
-                "detail": f"回滚批次 {batch_id}，共回滚 {rollback_count} 条记录",
+                "detail": f"回滚批次 {batch_id}，共回滚 {rollback_count} 条记录（含导入汇总日志 {import_log_removed} 条）",
                 "success": True,
             })
 
