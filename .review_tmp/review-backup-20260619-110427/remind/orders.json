@@ -1,0 +1,123 @@
+[
+  {
+    "order_id": "d3138065-a32b-42a9-b144-6bb1a7b3599a",
+    "reservation_id": "96cd46e7-b86f-49dd-a5e9-19b92914d15b",
+    "book_id": "CFG-B001",
+    "reader_id": "CFG-R001",
+    "trigger_reason": "long_waiting",
+    "status": "expired",
+    "operator": "cfg-tester",
+    "remark": "",
+    "config_signature": "f67baa001e5c9b1eab1e0746bb5f05f7c7cef35798fa83eebf8d80c598f29068",
+    "reservation_status_at_create": "available",
+    "timeline": [
+      {
+        "event": "created",
+        "timestamp": "2026-06-19T03:01:05.282633+00:00",
+        "operator": "cfg-tester",
+        "detail": "创建催办单，触发原因: long_waiting，预约状态: available"
+      },
+      {
+        "event": "recovered",
+        "timestamp": "2026-06-19T03:01:08.071895+00:00",
+        "operator": null,
+        "detail": "服务重启，催办单由状态 pending 恢复为 processed"
+      },
+      {
+        "event": "expired",
+        "timestamp": "2026-06-19T03:01:08.074035+00:00",
+        "operator": null,
+        "detail": "馆藏配置已变更，催办单自动失效"
+      }
+    ],
+    "created_at": "2026-06-19T03:01:05.282644+00:00",
+    "updated_at": "2026-06-19T03:01:08.074035+00:00",
+    "revoked_at": null,
+    "expired_at": "2026-06-19T03:01:08.074035+00:00",
+    "final_status": "expired",
+    "recovered_note": "服务重启，由状态 pending 恢复为 processed",
+    "expire_reason": "馆藏配置已变更，催办单失效"
+  },
+  {
+    "order_id": "5c7c7060-9ca3-4aea-9cec-5a2e3b6d99bb",
+    "reservation_id": "6c080f94-aed2-450c-84dd-52f08899f64f",
+    "book_id": "RM-B006",
+    "reader_id": "RM-R006",
+    "trigger_reason": "manual",
+    "status": "pending",
+    "operator": null,
+    "remark": "",
+    "config_signature": "5bf57924b2147ac41c2e2a8c17eee1942e00bc8f079f3f10223d9bcf34c1d681",
+    "reservation_status_at_create": "available",
+    "timeline": [
+      {
+        "event": "created",
+        "timestamp": "2026-06-19T03:01:08.619792+00:00",
+        "operator": null,
+        "detail": "创建催办单，触发原因: manual，预约状态: available"
+      }
+    ],
+    "created_at": "2026-06-19T03:01:08.619913+00:00",
+    "updated_at": "2026-06-19T03:01:08.619921+00:00",
+    "revoked_at": null,
+    "expired_at": null,
+    "final_status": null
+  },
+  {
+    "order_id": "3d419e51-3e4d-4874-8858-ae01b4f2e0e5",
+    "reservation_id": "13d5dcf0-8cce-4700-867b-5e52d907fd7e",
+    "book_id": "RM-B007",
+    "reader_id": "RM-R007",
+    "trigger_reason": "overdue_pickup",
+    "status": "revoked",
+    "operator": "e2e-user",
+    "remark": "端到端催办",
+    "config_signature": "3c069c015a75b3b81b3ddde92a4b706ba89f57410447fc7fe021fa059699a43e",
+    "reservation_status_at_create": "available",
+    "timeline": [
+      {
+        "event": "created",
+        "timestamp": "2026-06-19T03:01:08.718360+00:00",
+        "operator": "e2e-user",
+        "detail": "创建催办单，触发原因: overdue_pickup，预约状态: available"
+      },
+      {
+        "event": "revoked",
+        "timestamp": "2026-06-19T03:01:08.738072+00:00",
+        "operator": "e2e-admin",
+        "detail": "撤销催办单，操作者: e2e-admin"
+      }
+    ],
+    "created_at": "2026-06-19T03:01:08.718375+00:00",
+    "updated_at": "2026-06-19T03:01:08.738072+00:00",
+    "revoked_at": "2026-06-19T03:01:08.738072+00:00",
+    "expired_at": null,
+    "final_status": "revoked",
+    "revoked_by": "e2e-admin"
+  },
+  {
+    "order_id": "796cbde3-51f1-45cd-91fc-a979ac7fa1bb",
+    "reservation_id": "13d5dcf0-8cce-4700-867b-5e52d907fd7e",
+    "book_id": "RM-B007",
+    "reader_id": "RM-R007",
+    "trigger_reason": "long_waiting",
+    "status": "pending",
+    "operator": "e2e-user2",
+    "remark": "",
+    "config_signature": "3c069c015a75b3b81b3ddde92a4b706ba89f57410447fc7fe021fa059699a43e",
+    "reservation_status_at_create": "available",
+    "timeline": [
+      {
+        "event": "created",
+        "timestamp": "2026-06-19T03:01:08.745365+00:00",
+        "operator": "e2e-user2",
+        "detail": "创建催办单，触发原因: long_waiting，预约状态: available"
+      }
+    ],
+    "created_at": "2026-06-19T03:01:08.745380+00:00",
+    "updated_at": "2026-06-19T03:01:08.745386+00:00",
+    "revoked_at": null,
+    "expired_at": null,
+    "final_status": null
+  }
+]

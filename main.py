@@ -5,6 +5,7 @@ from flask import Flask, request, jsonify
 import service
 import sandbox_service
 import checkup_service
+import remind_service
 
 app = Flask(__name__)
 
@@ -470,11 +471,77 @@ def api_void_checkup(record_id):
     return jsonify({"ok": True, "data": record}), 200
 
 
+@app.route("/api/remind", methods=["POST"])
+def api_create_remind():
+    d = request.get_json(force=True)
+    reservation_id = d.get("reservation_id")
+    trigger_reason = d.get("trigger_reason")
+    if not reservation_id:
+        return jsonify({"ok": False, "error": "缺少 reservation_id 字段"}), 400
+    if not trigger_reason:
+        return jsonify({"ok": False, "error": "缺少 trigger_reason 字段"}), 400
+    operator = d.get("operator")
+    remark = d.get("remark")
+    order, err = remind_service.create_remind(reservation_id, trigger_reason, operator=operator, remark=remark)
+    if err:
+        if "已存在" in str(err):
+            return jsonify({"ok": False, "error": err}), 409
+        return jsonify({"ok": False, "error": err}), 400
+    full_result, _ = remind_service.get_remind(order["order_id"])
+    return jsonify({"ok": True, "data": full_result}), 201
+
+
+@app.route("/api/remind", methods=["GET"])
+def api_list_reminds():
+    status = request.args.get("status")
+    book_id = request.args.get("book_id")
+    reader_id = request.args.get("reader_id")
+    trigger_reason = request.args.get("trigger_reason")
+    limit = request.args.get("limit", 100, type=int)
+    orders = remind_service.list_reminds(
+        status=status, book_id=book_id, reader_id=reader_id,
+        trigger_reason=trigger_reason, limit=limit,
+    )
+    return jsonify({"ok": True, "data": orders}), 200
+
+
+@app.route("/api/remind/<order_id>", methods=["GET"])
+def api_get_remind(order_id):
+    result, err = remind_service.get_remind(order_id)
+    if err:
+        return jsonify({"ok": False, "error": err}), 404
+    return jsonify({"ok": True, "data": result}), 200
+
+
+@app.route("/api/remind/<order_id>/export", methods=["GET"])
+def api_export_remind(order_id):
+    report, err = remind_service.export_remind_report(order_id)
+    if err:
+        return jsonify({"ok": False, "error": err}), 404
+    return jsonify({"ok": True, "data": report}), 200
+
+
+@app.route("/api/remind/<order_id>/revoke", methods=["POST"])
+def api_revoke_remind(order_id):
+    d = request.get_json(force=True) if request.is_json else {}
+    operator = d.get("operator")
+    order, err = remind_service.revoke_remind(order_id, operator=operator)
+    if err:
+        if "已撤销" in str(err):
+            return jsonify({"ok": False, "error": err}), 409
+        if "已失效" in str(err):
+            return jsonify({"ok": False, "error": err}), 409
+        return jsonify({"ok": False, "error": err}), 404
+    return jsonify({"ok": True, "data": order}), 200
+
+
 def main():
     import store as _store
     import checkup_store as _checkup_store
+    import remind_store as _remind_store
     print(f"[启动] 数据目录: {_store.DATA_DIR}")
     print(f"[启动] 体检目录: {_checkup_store.CHECKUP_BASE_DIR}")
+    print(f"[启动] 催办目录: {_remind_store.REMIND_BASE_DIR}")
     print("[启动] 检查并处理过期预约...")
     service.process_expired()
     print("[启动] 过期检查完成，启动定时过期扫描（每10秒）")
@@ -494,6 +561,16 @@ def main():
         print(f"[启动] 因配置变更失效了 {len(stale_invalidated)} 条体检记录")
         for r in stale_invalidated:
             print(f"  - 体检 {r['record_id']}: {r['previous_status']} -> {r['new_status']}")
+    remind_recovered = remind_service.recover_reminds_on_startup()
+    if remind_recovered:
+        print(f"[启动] 恢复了 {len(remind_recovered)} 个异常中断的催办单")
+        for r in remind_recovered:
+            print(f"  - 催办 {r['order_id']}: {r['previous_status']} -> {r['new_status']}")
+    remind_stale_invalidated = remind_service.invalidate_stale_reminds()
+    if remind_stale_invalidated:
+        print(f"[启动] 因配置变更失效了 {len(remind_stale_invalidated)} 条催办单")
+        for r in remind_stale_invalidated:
+            print(f"  - 催办 {r['order_id']}: {r['previous_status']} -> {r['new_status']}")
     app.run(host="127.0.0.1", port=5000, debug=False)
 
 

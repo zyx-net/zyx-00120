@@ -117,6 +117,21 @@ python demo9.py
 python demo10.py
 ```
 
+预约履约催办中心回归测试（覆盖：
+- 创建催办单：逾期未取/长时间待借/人工催办三种触发原因
+- 列表筛选：按状态/书目/读者/触发原因多维度筛选
+- 查看详情、导出 JSON 报告（含触发原因、处理人、时间线、最终状态）、撤销催办三条链路
+- 同一预约重复催办拦截、并发操作冲突处理
+- 只读查看与撤销操作权限区分
+- 服务重启后继续查询、pending 催办单自动恢复为 processed
+- 馆藏配置变更后旧催办单自动失效
+- 催办日志单独落盘，不混入正式预约日志
+- 失败催办不污染正式预约数据）：
+
+```bash
+python demo11.py
+```
+
 ## 数据文件位置
 
 所有持久化数据以 UTF-8 JSON 格式存储在项目目录下的 `data/` 文件夹，服务重启后完整恢复。
@@ -137,8 +152,16 @@ python demo10.py
 | `checkup/logs.json` | 体检操作日志（创建、导出、作废等操作，不混入正式日志） |
 | `checkup/conclusions.json` | 体检结论明细（结构校验、必填字段、版本兼容、敏感配置检查的详细结果） |
 
+催办相关数据存储在 `remind/` 目录，与正式数据完全隔离：
+
+| 文件 | 内容 |
+|------|------|
+| `remind/orders.json` | 催办单（order_id、预约ID、触发原因、状态、时间线、操作者等） |
+| `remind/logs.json` | 催办操作日志（创建、导出、撤销、失效等操作，不混入正式日志） |
+
 要完全重置数据，只需删除 `data/` 目录下的所有 `.json` 文件并重启服务。
 要清除体检数据，删除 `checkup/` 目录下的所有 `.json` 文件即可。
+要清除催办数据，删除 `remind/` 目录下的所有 `.json` 文件即可。
 
 ## HTTP API 一览
 
@@ -234,6 +257,16 @@ python demo10.py
 | GET | `/api/checkup/<record_id>` | 查询体检详情（只读，含结论明细） | — |
 | GET | `/api/checkup/<record_id>/export` | 导出 JSON 体检报告（只读，含完整结论和配置状态） | — |
 | POST | `/api/checkup/<record_id>/void` | 手动作废体检记录（需 operator，与只读操作区分） | `{"operator": 可选}` |
+
+### 预约履约催办中心（v6.0 新增）
+
+| 方法 | 路径 | 说明 | 参数 |
+|------|------|------|------|
+| POST | `/api/remind` | 创建催办单（逾期未取/长时间待借/人工催办） | `{"reservation_id", "trigger_reason", "operator": 可选, "remark": 可选}` |
+| GET | `/api/remind` | 列出催办单（支持多维度筛选） | `status`(可选)、`book_id`(可选)、`reader_id`(可选)、`trigger_reason`(可选)、`limit`(可选，默认 100) |
+| GET | `/api/remind/<order_id>` | 查询催办详情（只读，含时间线和配置状态） | — |
+| GET | `/api/remind/<order_id>/export` | 导出 JSON 催办报告（只读，含触发原因、处理人、时间线、最终状态） | — |
+| POST | `/api/remind/<order_id>/revoke` | 撤销催办单（需 operator，与只读操作区分） | `{"operator": 可选}` |
 
 ---
 

@@ -1,0 +1,74 @@
+[
+  {
+    "log_id": "20de7c37-c73d-4020-a0de-a70465f2557d",
+    "timestamp": "2026-06-19T03:01:05.283194+00:00",
+    "order_id": "d3138065-a32b-42a9-b144-6bb1a7b3599a",
+    "action": "remind_create",
+    "operator": "cfg-tester",
+    "detail": "创建催办单，触发原因: long_waiting，预约: 96cd46e7-b86f-49dd-a5e9-19b92914d15b",
+    "success": true
+  },
+  {
+    "log_id": "1e604116-8f81-460b-b90c-220791405af4",
+    "timestamp": "2026-06-19T03:01:08.074829+00:00",
+    "order_id": "d3138065-a32b-42a9-b144-6bb1a7b3599a",
+    "action": "remind_expire",
+    "operator": null,
+    "detail": "馆藏配置变更，催办单自动失效",
+    "success": true
+  },
+  {
+    "log_id": "245b5596-593f-42e3-8eab-8db5703d6234",
+    "timestamp": "2026-06-19T03:01:08.568214+00:00",
+    "order_id": "d3138065-a32b-42a9-b144-6bb1a7b3599a",
+    "action": "remind_export",
+    "operator": null,
+    "detail": "导出催办报告: 94bf7d37-3431-4c3b-bcc9-351bde84865d",
+    "success": true
+  },
+  {
+    "log_id": "e335d807-6f8f-4dc0-81fe-a1f3d3a4b0fc",
+    "timestamp": "2026-06-19T03:01:08.629553+00:00",
+    "order_id": "5c7c7060-9ca3-4aea-9cec-5a2e3b6d99bb",
+    "action": "remind_create",
+    "operator": null,
+    "detail": "创建催办单，触发原因: manual，预约: 6c080f94-aed2-450c-84dd-52f08899f64f",
+    "success": true
+  },
+  {
+    "log_id": "13721029-46e9-4a7b-89df-4d00060b22ab",
+    "timestamp": "2026-06-19T03:01:08.720272+00:00",
+    "order_id": "3d419e51-3e4d-4874-8858-ae01b4f2e0e5",
+    "action": "remind_create",
+    "operator": "e2e-user",
+    "detail": "创建催办单，触发原因: overdue_pickup，预约: 13d5dcf0-8cce-4700-867b-5e52d907fd7e",
+    "success": true
+  },
+  {
+    "log_id": "e9ecd079-932b-49ee-8fc8-1721e7423967",
+    "timestamp": "2026-06-19T03:01:08.733020+00:00",
+    "order_id": "3d419e51-3e4d-4874-8858-ae01b4f2e0e5",
+    "action": "remind_export",
+    "operator": null,
+    "detail": "导出催办报告: aa38e352-09b5-4aaf-86ca-bdf40d89884f",
+    "success": true
+  },
+  {
+    "log_id": "06efd9ab-7001-4d29-8fa6-27ff9bc68b4c",
+    "timestamp": "2026-06-19T03:01:08.739317+00:00",
+    "order_id": "3d419e51-3e4d-4874-8858-ae01b4f2e0e5",
+    "action": "remind_revoke",
+    "operator": "e2e-admin",
+    "detail": "撤销催办单，操作者: e2e-admin",
+    "success": true
+  },
+  {
+    "log_id": "8c224e7f-45a9-4eb1-a3c8-7fb74fabec25",
+    "timestamp": "2026-06-19T03:01:08.746771+00:00",
+    "order_id": "796cbde3-51f1-45cd-91fc-a979ac7fa1bb",
+    "action": "remind_create",
+    "operator": "e2e-user2",
+    "detail": "创建催办单，触发原因: long_waiting，预约: 13d5dcf0-8cce-4700-867b-5e52d907fd7e",
+    "success": true
+  }
+]
