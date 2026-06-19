@@ -1,37 +1,44 @@
 [
   {
-    "book_id": "TEST-B001",
-    "title": "测试书1",
-    "total_copies": 3,
+    "book_id": "ORDER-1-001",
+    "title": "批次测试书1",
+    "total_copies": 5,
     "borrow_days": 30,
     "retain_hours": 24
   },
   {
-    "book_id": "TEST-B002",
-    "title": "测试书2",
-    "total_copies": 1,
+    "book_id": "ORDER-1-002",
+    "title": "批次测试书2",
+    "total_copies": 3,
     "borrow_days": 14,
     "retain_hours": 12
   },
   {
-    "book_id": "NEW-B001",
-    "title": "配置切换后新书1",
-    "total_copies": 3,
-    "borrow_days": 7,
-    "retain_hours": 6
-  },
-  {
-    "book_id": "NEW-B002",
-    "title": "配置切换后新书2",
-    "total_copies": 2,
-    "borrow_days": 21,
+    "book_id": "ORDER-2-001",
+    "title": "批次测试书1",
+    "total_copies": 5,
+    "borrow_days": 30,
     "retain_hours": 24
   },
   {
-    "book_id": "RVW-B001",
-    "title": "Reviewer Import Book",
-    "total_copies": 2,
+    "book_id": "ORDER-2-002",
+    "title": "批次测试书2",
+    "total_copies": 3,
     "borrow_days": 14,
-    "retain_hours": 8
+    "retain_hours": 12
+  },
+  {
+    "book_id": "ORDER-3-001",
+    "title": "批次测试书1",
+    "total_copies": 5,
+    "borrow_days": 30,
+    "retain_hours": 24
+  },
+  {
+    "book_id": "ORDER-3-002",
+    "title": "批次测试书2",
+    "total_copies": 3,
+    "borrow_days": 14,
+    "retain_hours": 12
   }
 ]

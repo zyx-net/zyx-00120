@@ -1,22 +1,17 @@
 [
   {
-    "reader_id": "R-TEST-BL1",
-    "reason": "测试黑名单原因1",
-    "added_at": "2026-06-18T00:00:00+00:00"
+    "reader_id": "BL-ORDER1-001",
+    "reason": "逾期未还",
+    "added_at": "2026-06-18T10:00:00+00:00"
   },
   {
-    "reader_id": "R-TEST-BL2",
-    "reason": "测试黑名单原因2",
-    "added_at": "2026-06-19T00:00:00+00:00"
+    "reader_id": "BL-ORDER2-001",
+    "reason": "逾期未还",
+    "added_at": "2026-06-18T10:00:00+00:00"
   },
   {
-    "reader_id": "R-NEW-BL1",
-    "reason": "新黑名单原因",
-    "added_at": "2026-06-20T00:00:00+00:00"
-  },
-  {
-    "reader_id": "RVW-BL1",
-    "reason": "reviewer check",
-    "added_at": "2026-06-19T00:00:00+00:00"
+    "reader_id": "BL-ORDER3-001",
+    "reason": "逾期未还",
+    "added_at": "2026-06-18T10:00:00+00:00"
   }
 ]

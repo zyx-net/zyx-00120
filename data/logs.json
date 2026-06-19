@@ -1,147 +1,80 @@
 [
   {
-    "log_id": "test-log-7",
-    "timestamp": "2026-06-18T07:00:00+00:00",
-    "action": "blacklist_add",
-    "reader_id": "R-TEST-BL1",
-    "success": true,
-    "detail": "加入黑名单"
-  },
-  {
-    "log_id": "test-log-8",
-    "timestamp": "2026-06-18T07:00:01+00:00",
-    "action": "blacklist_add",
-    "reader_id": "R-TEST-BL2",
-    "success": true,
-    "detail": "加入黑名单"
-  },
-  {
-    "log_id": "test-log-1",
-    "timestamp": "2026-06-18T09:00:00+00:00",
-    "action": "add_book",
-    "book_id": "TEST-B001",
-    "success": true,
-    "detail": "创建书目"
-  },
-  {
-    "log_id": "test-log-2",
-    "timestamp": "2026-06-18T09:00:01+00:00",
-    "action": "add_book",
-    "book_id": "TEST-B002",
-    "success": true,
-    "detail": "创建书目"
-  },
-  {
-    "log_id": "test-log-3",
-    "timestamp": "2026-06-18T10:00:00+00:00",
-    "action": "reserve",
-    "book_id": "TEST-B002",
-    "reader_id": "R-TEST-004",
-    "success": true,
-    "detail": "预约"
-  },
-  {
-    "log_id": "test-log-4",
-    "timestamp": "2026-06-18T11:00:00+00:00",
-    "action": "checkout",
-    "book_id": "TEST-B002",
-    "reader_id": "R-TEST-004",
-    "success": true,
-    "detail": "借出"
-  },
-  {
-    "log_id": "test-log-5",
+    "log_id": "log-ORDER-1-001",
     "timestamp": "2026-06-19T07:00:00+00:00",
-    "action": "reserve",
-    "book_id": "TEST-B001",
-    "reader_id": "R-TEST-001",
-    "success": true,
-    "detail": "预约并待取"
+    "action": "add_book",
+    "book_id": "ORDER-1-001",
+    "detail": "添加书目 批次测试书1",
+    "success": true
   },
   {
-    "log_id": "test-log-6",
+    "log_id": "log-ORDER-1-002",
     "timestamp": "2026-06-19T08:00:00+00:00",
     "action": "reserve",
-    "book_id": "TEST-B001",
-    "reader_id": "R-TEST-002",
-    "success": true,
-    "detail": "排队等待"
-  },
-  {
-    "log_id": "0ef91410-0224-4c8e-bd79-0534c90e2d0b",
-    "timestamp": "2026-06-19T00:02:10.502684+00:00",
-    "action": "import_snapshot",
-    "reader_id": null,
-    "book_id": null,
-    "detail": "快照导入成功：{'books': 2, 'active_reservations': 3, 'blacklist': 2, 'logs': 8}",
+    "book_id": "ORDER-1-001",
+    "reader_id": "R-ORDER1-001",
+    "detail": "预约成功，状态=waiting",
     "success": true
   },
   {
-    "log_id": "95f33ef2-b516-4101-9c94-7d31cbe5ca1e",
-    "timestamp": "2026-06-19T00:02:14.160147+00:00",
+    "log_id": "59335e8b-0202-4270-8602-4ccd1c4de16e",
+    "timestamp": "2026-06-19T00:20:58.126444+00:00",
     "action": "import_snapshot",
     "reader_id": null,
     "book_id": null,
-    "detail": "快照导入发现 7 个冲突，已中止",
-    "success": false
+    "detail": "快照导入成功：{'books': 2, 'active_reservations': 2, 'blacklist': 1, 'logs': 2}，批次ID: 681262f2-56dd-4e46-b03b-5b7c52545f66",
+    "success": true
   },
   {
-    "log_id": "new-log-1",
-    "timestamp": "2026-06-20T07:00:00+00:00",
+    "log_id": "log-ORDER-2-001",
+    "timestamp": "2026-06-19T07:00:00+00:00",
     "action": "add_book",
-    "book_id": "NEW-B001",
+    "book_id": "ORDER-2-001",
+    "detail": "添加书目 批次测试书1",
     "success": true
   },
   {
-    "log_id": "new-log-2",
-    "timestamp": "2026-06-20T08:00:00+00:00",
+    "log_id": "log-ORDER-2-002",
+    "timestamp": "2026-06-19T08:00:00+00:00",
     "action": "reserve",
-    "book_id": "NEW-B001",
-    "reader_id": "R-NEW-001",
+    "book_id": "ORDER-2-001",
+    "reader_id": "R-ORDER2-001",
+    "detail": "预约成功，状态=waiting",
     "success": true
   },
   {
-    "log_id": "0ade727c-9965-4299-83f2-1aba1ad3a444",
-    "timestamp": "2026-06-19T00:02:14.187900+00:00",
+    "log_id": "5dfaed3e-1012-43dd-b05e-230d79041fe6",
+    "timestamp": "2026-06-19T00:20:59.139650+00:00",
     "action": "import_snapshot",
     "reader_id": null,
     "book_id": null,
-    "detail": "快照导入成功：{'books': 2, 'active_reservations': 1, 'blacklist': 1, 'logs': 2}",
+    "detail": "快照导入成功：{'books': 2, 'active_reservations': 2, 'blacklist': 1, 'logs': 2}，批次ID: 919edb10-3ae8-46b6-a7c4-71b1c4d91e9a",
     "success": true
   },
   {
-    "log_id": "rvw-log-1",
-    "timestamp": "2026-06-19T00:00:00+00:00",
+    "log_id": "log-ORDER-3-001",
+    "timestamp": "2026-06-19T07:00:00+00:00",
     "action": "add_book",
-    "book_id": "RVW-B001",
-    "success": true,
-    "detail": "reviewer add"
-  },
-  {
-    "log_id": "rvw-log-2",
-    "timestamp": "2026-06-19T00:01:00+00:00",
-    "action": "reserve",
-    "book_id": "RVW-B001",
-    "reader_id": "RVW-R001",
-    "success": true,
-    "detail": "reviewer reserve"
-  },
-  {
-    "log_id": "7c7cf502-b460-4fb1-9431-9cd6d51c3b43",
-    "timestamp": "2026-06-19T00:03:05.129761+00:00",
-    "action": "import_snapshot",
-    "reader_id": null,
-    "book_id": null,
-    "detail": "快照导入成功：{'books': 1, 'active_reservations': 2, 'blacklist': 1, 'logs': 2}",
+    "book_id": "ORDER-3-001",
+    "detail": "添加书目 批次测试书1",
     "success": true
   },
   {
-    "log_id": "04cd4f0a-9bc8-497c-847e-bce9331b9db5",
-    "timestamp": "2026-06-19T00:03:05.134455+00:00",
+    "log_id": "log-ORDER-3-002",
+    "timestamp": "2026-06-19T08:00:00+00:00",
+    "action": "reserve",
+    "book_id": "ORDER-3-001",
+    "reader_id": "R-ORDER3-001",
+    "detail": "预约成功，状态=waiting",
+    "success": true
+  },
+  {
+    "log_id": "53f356c8-8d4e-477b-aa12-79fef52fa0c5",
+    "timestamp": "2026-06-19T00:21:00.152617+00:00",
     "action": "import_snapshot",
     "reader_id": null,
     "book_id": null,
-    "detail": "快照导入发现 4 个冲突，已中止",
-    "success": false
+    "detail": "快照导入成功：{'books': 2, 'active_reservations': 2, 'blacklist': 1, 'logs': 2}，批次ID: 5daf79bd-289d-4e40-b486-e04c6ade5a5c",
+    "success": true
   }
 ]

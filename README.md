@@ -103,6 +103,7 @@ python demo8.py
 | `data/reservations.json` | 预约/借阅记录（状态：waiting / available / borrowed / returned / expired / cancelled） |
 | `data/blacklist.json` | 黑名单（读者 ID、原因、加入时间） |
 | `data/logs.json` | 所有操作日志（包含成功与失败，支持按书目、读者过滤） |
+| `data/batches.json` | 导入批次记录（批次ID、状态、导入明细、回滚信息等） |
 
 要完全重置数据，只需删除 `data/` 目录下的所有 `.json` 文件并重启服务。
 
@@ -166,6 +167,15 @@ python demo8.py
 | GET | `/api/snapshot/export` | 导出完整快照（书目配置 + 活跃预约 + 黑名单 + 相关状态日志） | — |
 | POST | `/api/snapshot/import` | 导入完整快照（支持 dry-run 预检，整批回滚） | `dry_run`(可选，`true`/`false`，默认 `false`) |
 | POST | `/api/snapshot/precheck` | 迁移预检报告（不落库，按书目/预约/黑名单/日志四块展示差异明细和可读摘要） | — |
+
+### 导入批次管理（v3.0 新增）
+
+| 方法 | 路径 | 说明 | 参数 |
+|------|------|------|------|
+| GET | `/api/batches` | 列出所有导入批次（按时间倒序） | `limit`(可选，默认 100) |
+| GET | `/api/batches/<batch_id>` | 查询单个批次详情（含完整导入明细） | — |
+| GET | `/api/batches/<batch_id>/export` | 导出某个批次的完整快照（与导入时一致） | — |
+| POST | `/api/batches/<batch_id>/rollback` | 回滚指定批次（幂等，有冲突时拦截） | — |
 
 ---
 
@@ -1326,3 +1336,396 @@ python demo6.py
 9. 日志文件和关键状态变化核对
 
 一键运行：`python demo8.py`
+
+---
+
+## 导入批次管理接口详解（v3.0 新增）
+
+每次成功的快照正式导入都会生成一条**批次记录**，记录导入的完整明细。你可以按批次查看详情、重新导出快照，以及安全地回滚整个批次带来的所有变化。
+
+### 核心特性
+
+1. **批次可追溯**：每次正式导入都生成唯一批次 ID，包含完整导入明细
+2. **可回滚**：一键撤销整个批次的所有数据变更（books/reservations/blacklist/logs）
+3. **冲突检测**：回滚前检查数据是否在导入后被修改过，有冲突则明确拦截并返回可读原因
+4. **幂等回滚**：同一批次重复回滚不报错，不会重复生成日志或改变统计
+5. **数据隔离**：回滚只影响本批次导入的数据，不影响批次之前已有的数据
+6. **持久化**：批次记录写入 `data/batches.json`，服务重启后完整恢复
+7. **可导出**：从批次记录重新导出与导入时完全一致的快照
+
+---
+
+### GET `/api/batches` - 批次列表
+
+**功能说明**：列出所有导入批次，按创建时间倒序排列（最新的在前）。
+
+**Query 参数**：
+- `limit`: 可选，返回数量上限，默认 100
+
+**请求示例**：
+```bash
+curl http://127.0.0.1:5000/api/batches
+```
+
+**响应示例**（HTTP 200）：
+```json
+{
+  "ok": true,
+  "data": [
+    {
+      "batch_id": "550e8400-e29b-41d4-a716-446655440000",
+      "type": "snapshot_import",
+      "status": "active",
+      "created_at": "2026-06-19T10:00:00.123456+00:00",
+      "rolled_back_at": null,
+      "summary": {
+        "books": 3,
+        "active_reservations": 4,
+        "blacklist": 2,
+        "logs": 25
+      }
+    }
+  ]
+}
+```
+
+**状态说明**：
+
+| 状态 | 说明 |
+|------|------|
+| `active` | 批次生效中，导入的数据在系统中 |
+| `rolled_back` | 批次已回滚，导入的数据已被移除 |
+
+---
+
+### GET `/api/batches/<batch_id>` - 批次详情
+
+**功能说明**：查询单个批次的完整信息，包括导入的全部明细数据。
+
+**请求示例**：
+```bash
+curl http://127.0.0.1:5000/api/batches/550e8400-e29b-41d4-a716-446655440000
+```
+
+**响应示例**（HTTP 200）：
+```json
+{
+  "ok": true,
+  "data": {
+    "batch_id": "550e8400-e29b-41d4-a716-446655440000",
+    "type": "snapshot_import",
+    "status": "active",
+    "created_at": "2026-06-19T10:00:00.123456+00:00",
+    "rolled_back_at": null,
+    "summary": {
+      "books": 2,
+      "active_reservations": 2,
+      "blacklist": 1,
+      "logs": 2
+    },
+    "imported_details": {
+      "books": [
+        {"book_id": "B001", "title": "Python编程", "total_copies": 5, "borrow_days": 30, "retain_hours": 24}
+      ],
+      "active_reservations": [...],
+      "blacklist": [...],
+      "logs": [...]
+    },
+    "rollback_log_id": null
+  }
+}
+```
+
+**错误响应**（HTTP 404）：
+```json
+{
+  "ok": false,
+  "error": "批次不存在"
+}
+```
+
+---
+
+### GET `/api/batches/<batch_id>/export` - 导出批次快照
+
+**功能说明**：从批次记录重新导出与导入时完全一致的完整快照，格式与 `GET /api/snapshot/export` 相同，并额外标注来源批次信息。
+
+**请求示例**：
+```bash
+curl http://127.0.0.1:5000/api/batches/550e8400-e29b-41d4-a716-446655440000/export
+```
+
+**响应示例**（HTTP 200）：
+```json
+{
+  "ok": true,
+  "data": {
+    "export_time": "2026-06-19T12:00:00.123456+00:00",
+    "version": "2.0",
+    "type": "full_snapshot",
+    "source_batch_id": "550e8400-e29b-41d4-a716-446655440000",
+    "source_created_at": "2026-06-19T10:00:00.123456+00:00",
+    "counts": {
+      "books": 2,
+      "active_reservations": 2,
+      "blacklist": 1,
+      "logs": 2
+    },
+    "books": [...],
+    "active_reservations": [...],
+    "blacklist": [...],
+    "logs": [...]
+  }
+}
+```
+
+---
+
+### POST `/api/batches/<batch_id>/rollback` - 回滚批次
+
+**功能说明**：撤销指定批次带来的所有数据变更。回滚是**幂等**的，同一批次多次回滚不会产生副作用。
+
+回滚会移除本批次导入的：
+- 书目配置（books）
+- 活跃预约（active_reservations）
+- 黑名单（blacklist）
+- 相关日志（logs）
+
+**回滚前冲突检测**：
+在执行回滚前，系统会检查每一条批次导入的数据在导入后是否被修改过。如果有任何数据被后续操作修改过，回滚会被**拦截**，并返回清晰的冲突明细和可读原因。
+
+**冲突类型**：
+
+| 冲突类型 | 说明 |
+|----------|------|
+| `book_modified` | 书目配置在导入后被修改过 |
+| `book_missing` | 书目已不存在（可能已被手动删除） |
+| `reservation_modified` | 预约状态在导入后发生变化（如已借出、已取消） |
+| `reservation_missing` | 预约记录已不存在 |
+| `blacklist_modified` | 黑名单记录在导入后被修改过 |
+| `blacklist_missing` | 黑名单记录已不存在（可能已被移出） |
+
+**请求示例 - 成功回滚**：
+```bash
+curl -X POST http://127.0.0.1:5000/api/batches/550e8400-e29b-41d4-a716-446655440000/rollback
+```
+
+**成功响应**（HTTP 200）：
+```json
+{
+  "ok": true,
+  "rollback_count": 7,
+  "already_rolled_back": false,
+  "message": "成功回滚 7 条记录",
+  "batch": {
+    "batch_id": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "rolled_back",
+    "rolled_back_at": "2026-06-19T12:00:00.123456+00:00"
+  }
+}
+```
+
+**请求示例 - 重复回滚（幂等）**：
+
+第二次调用同一回滚接口也会返回 200，但不会实际操作数据，也不会新增日志：
+```json
+{
+  "ok": true,
+  "rollback_count": 0,
+  "already_rolled_back": true,
+  "message": "批次已回滚，重复操作无效",
+  "batch": {
+    "batch_id": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "rolled_back",
+    "rolled_back_at": "2026-06-19T12:00:00.123456+00:00"
+  }
+}
+```
+
+**冲突响应**（HTTP 409）：
+```json
+{
+  "ok": false,
+  "message": "回滚存在冲突，部分数据在导入后被修改过",
+  "conflicts": [
+    {
+      "type": "book_modified",
+      "section": "books",
+      "book_id": "B001",
+      "changed_fields": [
+        {
+          "field": "title",
+          "original": "Python编程",
+          "current": "Python编程从入门到实践"
+        }
+      ],
+      "message": "书目 B001 在批次导入后被修改过，无法直接回滚"
+    },
+    {
+      "type": "reservation_modified",
+      "section": "active_reservations",
+      "reservation_id": "res-001",
+      "book_id": "B001",
+      "reader_id": "R001",
+      "changed_fields": [
+        {
+          "field": "status",
+          "original": "available",
+          "current": "borrowed"
+        }
+      ],
+      "message": "预约记录 res-001 在批次导入后状态发生变化，无法直接回滚"
+    }
+  ],
+  "batch": {
+    "batch_id": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "active"
+  }
+}
+```
+
+**重要保证**：
+- **原子性**：要么全部回滚成功，要么一条都不回滚（有冲突时完全不执行回滚）
+- **幂等性**：同一批次多次回滚，结果完全一致，不会重复生成日志
+- **数据安全**：回滚只移除本批次导入的数据，不影响批次之前已存在的任何数据
+- **日志一致**：回滚操作有独立日志（`action: rollback_batch`），不带 book_id/reader_id，不会被按书目/读者过滤命中
+
+---
+
+### 批次管理使用指南
+
+#### 场景1：导入后发现有问题，需要撤销
+
+```bash
+# 1. 查看批次列表
+curl http://127.0.0.1:5000/api/batches
+
+# 2. 查看批次详情确认
+curl http://127.0.0.1:5000/api/batches/<batch_id>
+
+# 3. 执行回滚
+curl -X POST http://127.0.0.1:5000/api/batches/<batch_id>/rollback
+```
+
+#### 场景2：需要重新导入同一批数据
+
+```bash
+# 1. 从旧批次导出快照
+curl http://127.0.0.1:5000/api/batches/<batch_id>/export > snapshot.json
+
+# 2. 用导出的快照重新导入
+curl -X POST http://127.0.0.1:5000/api/snapshot/import \
+  -H "Content-Type: application/json" \
+  -d "$(cat snapshot.json | jq '.data')"
+```
+
+#### 场景3：配置切换后导入新批次，验证互不影响
+
+```bash
+# 导入批次A
+curl -X POST http://127.0.0.1:5000/api/snapshot/import -d '...'
+# 导入批次B
+curl -X POST http://127.0.0.1:5000/api/snapshot/import -d '...'
+
+# 回滚批次A，批次B的数据不受影响
+curl -X POST http://127.0.0.1:5000/api/batches/<batch-a-id>/rollback
+```
+
+---
+
+### 一键运行批次管理测试
+
+```bash
+python demo9.py
+```
+
+该脚本覆盖以下 20 个测试场景：
+1. 批次列表 API 存在且返回空列表
+2. 正式导入快照后生成批次记录
+3. 批次列表展示导入的批次
+4. 批次详情包含完整导入明细
+5. 批次导出功能 - 导出格式与快照一致
+6. 回滚批次 - 成功回滚所有数据
+7. 回滚幂等性 - 重复回滚不报错
+8. 批次状态更新 - 回滚后列表和详情都显示 rolled_back
+9. 不存在的批次返回 404
+10. 服务重启后批次数据持久化
+11. 配置切换后导入 - 新增批次与已有数据互不影响
+12. 回滚冲突检测 - 书目被修改后拦截回滚
+13. 回滚冲突检测 - 预约状态变化后拦截
+14. 混合有效/无效日志的批次导入和回滚
+15. 带冲突的快照导入不生成批次
+16. dry-run 导入不生成批次
+17. 批次数据与实际数据一致性核对
+18. 回滚后日志文件和 JSON 数据一致
+19. 多个批次按时间倒序排列
+20. 批次 limit 参数
+
+---
+
+## 本次新增要点（对应 v3.0）
+
+**导入批次管理 - 可撤销的快照导入**
+
+### 1. 批次记录
+
+每次成功的正式快照导入都会生成一条批次记录，包含：
+- 唯一批次 ID（UUID）
+- 批次状态（active / rolled_back）
+- 创建时间、回滚时间
+- 数量统计摘要（books/reservations/blacklist/logs）
+- **完整导入明细**：每本书、每条预约、每条黑名单、每条日志的原始数据
+
+批次记录持久化在 `data/batches.json` 中，服务重启后完整恢复。
+
+### 2. 批次查询与导出
+
+- **批次列表** (`GET /api/batches`)：按时间倒序展示所有批次，支持 limit 分页
+- **批次详情** (`GET /api/batches/<id>`)：查看批次完整信息，包括所有导入明细
+- **批次导出** (`GET /api/batches/<id>/export`)：重新导出与导入时完全一致的快照，标注来源批次
+
+### 3. 安全回滚机制
+
+**回滚操作** (`POST /api/batches/<id>/rollback`)：
+
+- **完整回滚**：同时回滚 books、reservations、blacklist、logs 四块数据
+- **冲突检测**：回滚前检查每一条数据是否在导入后被修改过
+  - 书目配置变更 → 拦截
+  - 预约状态变化（借出/归还/取消/过期）→ 拦截
+  - 黑名单修改 → 拦截
+  - 数据已不存在 → 拦截
+- **可读原因**：冲突响应包含变更字段明细（原值 vs 现值）和可读错误消息
+- **原子性保证**：有冲突时完全不回滚，不会出现"回滚一半"的情况
+- **幂等性**：同一批次多次回滚
+  - 返回相同结果（already_rolled_back=true）
+  - 不重复生成回滚日志
+  - 不改变任何统计数据
+- **数据隔离**：只移除本批次导入的数据，批次之前的已有数据完全不受影响
+
+### 4. 日志一致性
+
+- 回滚操作有独立日志（`action: rollback_batch`）
+- 回滚日志不带 `book_id` / `reader_id`，不会被按书目/读者过滤命中
+- 回滚移除的日志恰好是批次导入的日志，不多不少
+- 重复回滚不新增日志，保证日志统计不被刷乱
+
+### 5. 覆盖的关键场景
+
+1. **配置切换后导入**：多个批次独立管理，回滚一个不影响另一个
+2. **服务重启后**：批次记录、状态、明细完整恢复，回滚功能正常
+3. **带冲突的回滚**：数据被修改后明确拦截，返回详细冲突明细
+4. **混合有效/无效日志**：格式错误时不生成批次，冲突时也不生成批次
+5. **幂等回滚**：重复调用结果一致，日志不重复，统计不漂移
+6. **三方一致性**：report、日志文件、JSON 数据三处口径完全一致
+7. **dry-run 不生成批次**：预检和 dry-run 操作不留下任何批次记录
+
+### 6. 测试覆盖
+
+新增 `demo9.py` 回归测试脚本，覆盖 20 个核心场景，验证：
+- 批次明细完整性
+- 撤销结果正确性
+- 冲突状态准确性
+- 重启后数据一致性
+- 日志与 JSON 文件一致性
+
+一键运行：`python demo9.py`

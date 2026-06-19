@@ -707,6 +707,7 @@ _VALID_LOG_ACTIONS = {
     "import_collection", "import_collection_dry_run", "import_book",
     "export_collection",
     "import_snapshot", "import_snapshot_dry_run", "export_snapshot", "precheck_snapshot",
+    "rollback_batch",
 }
 
 
@@ -1659,6 +1660,258 @@ def import_snapshot(snapshot_data, dry_run=False):
                 "message": f"导入过程出错，已完整回滚所有数据: {str(e)}",
             }], None, report
 
+    batch_id = str(uuid.uuid4())
+    batch = {
+        "batch_id": batch_id,
+        "type": "snapshot_import",
+        "status": "active",
+        "created_at": _now(),
+        "rolled_back_at": None,
+        "summary": {
+            "books": len(books_data),
+            "active_reservations": len(reservations_data),
+            "blacklist": len(blacklist_data),
+            "logs": len(logs_data),
+        },
+        "imported_details": {
+            "books": books_data,
+            "active_reservations": reservations_data,
+            "blacklist": blacklist_data,
+            "logs": logs_data,
+        },
+        "rollback_log_id": None,
+    }
+    store.add_batch(batch)
+
     _log("import_snapshot", True,
-         detail=f"快照导入成功：{counts}")
-    return counts, None, None, report
+         detail=f"快照导入成功：{counts}，批次ID: {batch_id}")
+    return counts, None, None, report, batch_id
+
+
+def list_import_batches(limit=100):
+    batches = store.list_batches(limit=limit)
+    result = []
+    for b in batches:
+        result.append({
+            "batch_id": b["batch_id"],
+            "type": b["type"],
+            "status": b["status"],
+            "created_at": b["created_at"],
+            "rolled_back_at": b.get("rolled_back_at"),
+            "summary": b["summary"],
+        })
+    return result
+
+
+def get_import_batch(batch_id):
+    batch = store.get_batch(batch_id)
+    if not batch:
+        return None, "批次不存在"
+    return batch, None
+
+
+def export_batch(batch_id):
+    batch, err = get_import_batch(batch_id)
+    if err:
+        return None, err
+    snapshot = {
+        "export_time": _now(),
+        "version": "2.0",
+        "type": "full_snapshot",
+        "source_batch_id": batch_id,
+        "source_created_at": batch["created_at"],
+        "counts": batch["summary"],
+        "books": batch["imported_details"]["books"],
+        "active_reservations": batch["imported_details"]["active_reservations"],
+        "blacklist": batch["imported_details"]["blacklist"],
+        "logs": batch["imported_details"]["logs"],
+    }
+    return snapshot, None
+
+
+def _check_rollback_conflicts(batch):
+    conflicts = []
+    details = batch["imported_details"]
+
+    for book in details["books"]:
+        book_id = book["book_id"]
+        existing = store.load_book(book_id)
+        if not existing:
+            conflicts.append({
+                "type": "book_missing",
+                "section": "books",
+                "book_id": book_id,
+                "message": f"书目 {book_id} 已不存在，无法回滚（可能已被手动删除）",
+            })
+            continue
+        changed_fields = []
+        for field in ["title", "total_copies", "borrow_days", "retain_hours"]:
+            if existing.get(field) != book.get(field):
+                changed_fields.append({
+                    "field": field,
+                    "original": book.get(field),
+                    "current": existing.get(field),
+                })
+        if changed_fields:
+            conflicts.append({
+                "type": "book_modified",
+                "section": "books",
+                "book_id": book_id,
+                "changed_fields": changed_fields,
+                "message": f"书目 {book_id} 在批次导入后被修改过，无法直接回滚",
+            })
+
+    imported_res_map = {}
+    for res in details["active_reservations"]:
+        imported_res_map[res["reservation_id"]] = res
+
+    all_reservations = store.load_reservations()
+    for res_id, imported_res in imported_res_map.items():
+        existing = next((r for r in all_reservations if r["reservation_id"] == res_id), None)
+        if not existing:
+            conflicts.append({
+                "type": "reservation_missing",
+                "section": "active_reservations",
+                "reservation_id": res_id,
+                "book_id": imported_res.get("book_id"),
+                "reader_id": imported_res.get("reader_id"),
+                "message": f"预约记录 {res_id} 已不存在，无法回滚（可能已被取消或完成）",
+            })
+            continue
+        changed_fields = []
+        for field in ["book_id", "reader_id", "status", "created_at",
+                       "available_at", "expire_at", "borrowed_at", "returned_at"]:
+            if existing.get(field) != imported_res.get(field):
+                changed_fields.append({
+                    "field": field,
+                    "original": imported_res.get(field),
+                    "current": existing.get(field),
+                })
+        if changed_fields:
+            conflicts.append({
+                "type": "reservation_modified",
+                "section": "active_reservations",
+                "reservation_id": res_id,
+                "book_id": imported_res.get("book_id"),
+                "reader_id": imported_res.get("reader_id"),
+                "changed_fields": changed_fields,
+                "message": f"预约记录 {res_id} 在批次导入后状态发生变化，无法直接回滚",
+            })
+
+    imported_bl_map = {}
+    for bl in details["blacklist"]:
+        imported_bl_map[bl["reader_id"]] = bl
+
+    all_blacklist = store.load_blacklist()
+    existing_bl_map = {b["reader_id"]: b for b in all_blacklist}
+
+    for reader_id, imported_bl in imported_bl_map.items():
+        existing = existing_bl_map.get(reader_id)
+        if not existing:
+            conflicts.append({
+                "type": "blacklist_missing",
+                "section": "blacklist",
+                "reader_id": reader_id,
+                "message": f"黑名单记录 {reader_id} 已不存在，无法回滚（可能已被移出）",
+            })
+            continue
+        if existing.get("reason") != imported_bl.get("reason") or existing.get("added_at") != imported_bl.get("added_at"):
+            conflicts.append({
+                "type": "blacklist_modified",
+                "section": "blacklist",
+                "reader_id": reader_id,
+                "original": imported_bl,
+                "current": existing,
+                "message": f"黑名单记录 {reader_id} 在批次导入后被修改过，无法直接回滚",
+            })
+
+    return conflicts
+
+
+def rollback_batch(batch_id):
+    with store._lock:
+        batch = store.get_batch(batch_id)
+        if not batch:
+            return None, "批次不存在", None
+
+        if batch["status"] == "rolled_back":
+            return {
+                "rollback_count": 0,
+                "already_rolled_back": True,
+                "message": "批次已回滚，重复操作无效",
+            }, None, batch
+
+        if batch["status"] != "active":
+            return None, f"批次状态为 {batch['status']}，无法回滚", None
+
+        conflicts = _check_rollback_conflicts(batch)
+        if conflicts:
+            return None, {
+                "message": "回滚存在冲突，部分数据在导入后被修改过",
+                "conflicts": conflicts,
+            }, batch
+
+        backup = store.backup_all()
+        details = batch["imported_details"]
+        rollback_count = 0
+
+        try:
+            existing_books = store.list_books()
+            imported_book_ids = {b["book_id"] for b in details["books"]}
+            new_books = [b for b in existing_books if b["book_id"] not in imported_book_ids]
+            store.save_all_books(new_books)
+            rollback_count += len(details["books"])
+
+            all_reservations = store.load_reservations()
+            imported_res_ids = {r["reservation_id"] for r in details["active_reservations"]}
+            new_reservations = [r for r in all_reservations if r["reservation_id"] not in imported_res_ids]
+            store.save_all_reservations(new_reservations)
+            rollback_count += len(details["active_reservations"])
+
+            all_blacklist = store.load_blacklist()
+            imported_bl_ids = {b["reader_id"] for b in details["blacklist"]}
+            new_blacklist = [b for b in all_blacklist if b["reader_id"] not in imported_bl_ids]
+            store.save_all_blacklist(new_blacklist)
+            rollback_count += len(details["blacklist"])
+
+            all_logs = store.load_logs()
+            imported_log_ids = set()
+            for log in details["logs"]:
+                log_id = log.get("log_id")
+                if log_id:
+                    imported_log_ids.add(log_id)
+            new_logs = [l for l in all_logs if l.get("log_id") not in imported_log_ids]
+            store.save_all_logs(new_logs)
+            rollback_count += len(details["logs"])
+
+            rollback_log_id = str(uuid.uuid4())
+            store.append_log({
+                "log_id": rollback_log_id,
+                "timestamp": _now(),
+                "action": "rollback_batch",
+                "detail": f"回滚批次 {batch_id}，共回滚 {rollback_count} 条记录",
+                "success": True,
+            })
+
+            store.update_batch(batch_id, {
+                "status": "rolled_back",
+                "rolled_back_at": _now(),
+                "rollback_log_id": rollback_log_id,
+            })
+
+        except Exception as e:
+            store.restore_all(backup)
+            store.append_log({
+                "log_id": str(uuid.uuid4()),
+                "timestamp": _now(),
+                "action": "rollback_batch",
+                "detail": f"回滚批次 {batch_id} 失败，已恢复: {str(e)}",
+                "success": False,
+            })
+            return None, f"回滚失败，已恢复原状: {str(e)}", batch
+
+    return {
+        "rollback_count": rollback_count,
+        "already_rolled_back": False,
+        "message": f"成功回滚 {rollback_count} 条记录",
+    }, None, store.get_batch(batch_id)

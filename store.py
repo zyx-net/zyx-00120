@@ -195,3 +195,44 @@ def save_all_blacklist(blacklist):
 def save_all_logs(logs):
     with _lock:
         save("logs", logs)
+
+
+def load_batches():
+    return load("batches")
+
+
+def save_batches(batches):
+    with _lock:
+        save("batches", batches)
+
+
+def get_batch(batch_id):
+    batches = load_batches()
+    for b in batches:
+        if b["batch_id"] == batch_id:
+            return b
+    return None
+
+
+def add_batch(batch):
+    with _lock:
+        batches = load_batches()
+        batches.append(batch)
+        save_batches(batches)
+
+
+def update_batch(batch_id, updates):
+    with _lock:
+        batches = load_batches()
+        for i, b in enumerate(batches):
+            if b["batch_id"] == batch_id:
+                batches[i].update(updates)
+                save_batches(batches)
+                return batches[i]
+    return None
+
+
+def list_batches(limit=100):
+    batches = load_batches()
+    batches_sorted = sorted(batches, key=lambda b: b["created_at"], reverse=True)
+    return batches_sorted[:limit]

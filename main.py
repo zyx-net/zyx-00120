@@ -201,7 +201,9 @@ def api_export_snapshot():
 def api_import_snapshot():
     d = request.get_json(force=True)
     dry_run = request.args.get("dry_run", "false").lower() == "true"
-    imported_counts, conflicts, errors, report = service.import_snapshot(d, dry_run=dry_run)
+    result = service.import_snapshot(d, dry_run=dry_run)
+    imported_counts, conflicts, errors, report = result[:4]
+    batch_id = result[4] if len(result) > 4 else None
     if errors:
         resp = {"ok": False, "error": errors, "dry_run": dry_run}
         if report is not None:
@@ -224,6 +226,8 @@ def api_import_snapshot():
     }
     if report is not None:
         resp["report"] = report
+    if batch_id is not None:
+        resp["batch_id"] = batch_id
     return jsonify(resp), 200
 
 
@@ -237,6 +241,52 @@ def api_precheck_snapshot():
         "ok": True,
         "data": report,
     }), 200
+
+
+@app.route("/api/batches", methods=["GET"])
+def api_list_batches():
+    limit = request.args.get("limit", 100, type=int)
+    batches = service.list_import_batches(limit=limit)
+    return jsonify({"ok": True, "data": batches}), 200
+
+
+@app.route("/api/batches/<batch_id>", methods=["GET"])
+def api_get_batch(batch_id):
+    batch, err = service.get_import_batch(batch_id)
+    if err:
+        return jsonify({"ok": False, "error": err}), 404
+    return jsonify({"ok": True, "data": batch}), 200
+
+
+@app.route("/api/batches/<batch_id>/export", methods=["GET"])
+def api_export_batch(batch_id):
+    snapshot, err = service.export_batch(batch_id)
+    if err:
+        return jsonify({"ok": False, "error": err}), 404
+    return jsonify({"ok": True, "data": snapshot}), 200
+
+
+@app.route("/api/batches/<batch_id>/rollback", methods=["POST"])
+def api_rollback_batch(batch_id):
+    result, err, batch = service.rollback_batch(batch_id)
+    if err:
+        if isinstance(err, dict):
+            resp = {"ok": False, **err}
+            if batch is not None:
+                resp["batch"] = {
+                    "batch_id": batch["batch_id"],
+                    "status": batch["status"],
+                }
+            return jsonify(resp), 409
+        return jsonify({"ok": False, "error": err}), 400
+    resp = {"ok": True, **result}
+    if batch is not None:
+        resp["batch"] = {
+            "batch_id": batch["batch_id"],
+            "status": batch["status"],
+            "rolled_back_at": batch.get("rolled_back_at"),
+        }
+    return jsonify(resp), 200
 
 
 @app.route("/api/expire", methods=["POST"])

@@ -1,0 +1,248 @@
+[
+  {
+    "batch_id": "681262f2-56dd-4e46-b03b-5b7c52545f66",
+    "type": "snapshot_import",
+    "status": "active",
+    "created_at": "2026-06-19T00:20:58.125557+00:00",
+    "rolled_back_at": null,
+    "summary": {
+      "books": 2,
+      "active_reservations": 2,
+      "blacklist": 1,
+      "logs": 2
+    },
+    "imported_details": {
+      "books": [
+        {
+          "book_id": "ORDER-1-001",
+          "title": "批次测试书1",
+          "total_copies": 5,
+          "borrow_days": 30,
+          "retain_hours": 24
+        },
+        {
+          "book_id": "ORDER-1-002",
+          "title": "批次测试书2",
+          "total_copies": 3,
+          "borrow_days": 14,
+          "retain_hours": 12
+        }
+      ],
+      "active_reservations": [
+        {
+          "reservation_id": "res-ORDER-1-001-01",
+          "book_id": "ORDER-1-001",
+          "reader_id": "R-ORDER1-001",
+          "status": "waiting",
+          "created_at": "2026-06-19T08:00:00+00:00",
+          "available_at": null,
+          "expire_at": null,
+          "borrowed_at": null,
+          "returned_at": null
+        },
+        {
+          "reservation_id": "res-ORDER-1-001-02",
+          "book_id": "ORDER-1-001",
+          "reader_id": "R-ORDER1-002",
+          "status": "available",
+          "created_at": "2026-06-19T07:00:00+00:00",
+          "available_at": "2026-06-19T07:00:00+00:00",
+          "expire_at": "2026-06-20T07:00:00+00:00",
+          "borrowed_at": null,
+          "returned_at": null
+        }
+      ],
+      "blacklist": [
+        {
+          "reader_id": "BL-ORDER1-001",
+          "reason": "逾期未还",
+          "added_at": "2026-06-18T10:00:00+00:00"
+        }
+      ],
+      "logs": [
+        {
+          "log_id": "log-ORDER-1-001",
+          "timestamp": "2026-06-19T07:00:00+00:00",
+          "action": "add_book",
+          "book_id": "ORDER-1-001",
+          "detail": "添加书目 批次测试书1",
+          "success": true
+        },
+        {
+          "log_id": "log-ORDER-1-002",
+          "timestamp": "2026-06-19T08:00:00+00:00",
+          "action": "reserve",
+          "book_id": "ORDER-1-001",
+          "reader_id": "R-ORDER1-001",
+          "detail": "预约成功，状态=waiting",
+          "success": true
+        }
+      ]
+    },
+    "rollback_log_id": null
+  },
+  {
+    "batch_id": "919edb10-3ae8-46b6-a7c4-71b1c4d91e9a",
+    "type": "snapshot_import",
+    "status": "active",
+    "created_at": "2026-06-19T00:20:59.138732+00:00",
+    "rolled_back_at": null,
+    "summary": {
+      "books": 2,
+      "active_reservations": 2,
+      "blacklist": 1,
+      "logs": 2
+    },
+    "imported_details": {
+      "books": [
+        {
+          "book_id": "ORDER-2-001",
+          "title": "批次测试书1",
+          "total_copies": 5,
+          "borrow_days": 30,
+          "retain_hours": 24
+        },
+        {
+          "book_id": "ORDER-2-002",
+          "title": "批次测试书2",
+          "total_copies": 3,
+          "borrow_days": 14,
+          "retain_hours": 12
+        }
+      ],
+      "active_reservations": [
+        {
+          "reservation_id": "res-ORDER-2-001-01",
+          "book_id": "ORDER-2-001",
+          "reader_id": "R-ORDER2-001",
+          "status": "waiting",
+          "created_at": "2026-06-19T08:00:00+00:00",
+          "available_at": null,
+          "expire_at": null,
+          "borrowed_at": null,
+          "returned_at": null
+        },
+        {
+          "reservation_id": "res-ORDER-2-001-02",
+          "book_id": "ORDER-2-001",
+          "reader_id": "R-ORDER2-002",
+          "status": "available",
+          "created_at": "2026-06-19T07:00:00+00:00",
+          "available_at": "2026-06-19T07:00:00+00:00",
+          "expire_at": "2026-06-20T07:00:00+00:00",
+          "borrowed_at": null,
+          "returned_at": null
+        }
+      ],
+      "blacklist": [
+        {
+          "reader_id": "BL-ORDER2-001",
+          "reason": "逾期未还",
+          "added_at": "2026-06-18T10:00:00+00:00"
+        }
+      ],
+      "logs": [
+        {
+          "log_id": "log-ORDER-2-001",
+          "timestamp": "2026-06-19T07:00:00+00:00",
+          "action": "add_book",
+          "book_id": "ORDER-2-001",
+          "detail": "添加书目 批次测试书1",
+          "success": true
+        },
+        {
+          "log_id": "log-ORDER-2-002",
+          "timestamp": "2026-06-19T08:00:00+00:00",
+          "action": "reserve",
+          "book_id": "ORDER-2-001",
+          "reader_id": "R-ORDER2-001",
+          "detail": "预约成功，状态=waiting",
+          "success": true
+        }
+      ]
+    },
+    "rollback_log_id": null
+  },
+  {
+    "batch_id": "5daf79bd-289d-4e40-b486-e04c6ade5a5c",
+    "type": "snapshot_import",
+    "status": "active",
+    "created_at": "2026-06-19T00:21:00.150871+00:00",
+    "rolled_back_at": null,
+    "summary": {
+      "books": 2,
+      "active_reservations": 2,
+      "blacklist": 1,
+      "logs": 2
+    },
+    "imported_details": {
+      "books": [
+        {
+          "book_id": "ORDER-3-001",
+          "title": "批次测试书1",
+          "total_copies": 5,
+          "borrow_days": 30,
+          "retain_hours": 24
+        },
+        {
+          "book_id": "ORDER-3-002",
+          "title": "批次测试书2",
+          "total_copies": 3,
+          "borrow_days": 14,
+          "retain_hours": 12
+        }
+      ],
+      "active_reservations": [
+        {
+          "reservation_id": "res-ORDER-3-001-01",
+          "book_id": "ORDER-3-001",
+          "reader_id": "R-ORDER3-001",
+          "status": "waiting",
+          "created_at": "2026-06-19T08:00:00+00:00",
+          "available_at": null,
+          "expire_at": null,
+          "borrowed_at": null,
+          "returned_at": null
+        },
+        {
+          "reservation_id": "res-ORDER-3-001-02",
+          "book_id": "ORDER-3-001",
+          "reader_id": "R-ORDER3-002",
+          "status": "available",
+          "created_at": "2026-06-19T07:00:00+00:00",
+          "available_at": "2026-06-19T07:00:00+00:00",
+          "expire_at": "2026-06-20T07:00:00+00:00",
+          "borrowed_at": null,
+          "returned_at": null
+        }
+      ],
+      "blacklist": [
+        {
+          "reader_id": "BL-ORDER3-001",
+          "reason": "逾期未还",
+          "added_at": "2026-06-18T10:00:00+00:00"
+        }
+      ],
+      "logs": [
+        {
+          "log_id": "log-ORDER-3-001",
+          "timestamp": "2026-06-19T07:00:00+00:00",
+          "action": "add_book",
+          "book_id": "ORDER-3-001",
+          "detail": "添加书目 批次测试书1",
+          "success": true
+        },
+        {
+          "log_id": "log-ORDER-3-002",
+          "timestamp": "2026-06-19T08:00:00+00:00",
+          "action": "reserve",
+          "book_id": "ORDER-3-001",
+          "reader_id": "R-ORDER3-001",
+          "detail": "预约成功，状态=waiting",
+          "success": true
+        }
+      ]
+    },
+    "rollback_log_id": null
+  }
+]
