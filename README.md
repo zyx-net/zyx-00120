@@ -187,6 +187,21 @@ python demo9.py
 | GET | `/api/batches/<batch_id>/export` | 导出某个批次的完整快照（与导入时一致） | — |
 | POST | `/api/batches/<batch_id>/rollback` | 回滚指定批次（幂等，有冲突时拦截） | — |
 
+### 导入演练沙箱（v4.0 新增）
+
+| 方法 | 路径 | 说明 | 参数 |
+|------|------|------|------|
+| POST | `/api/sandbox` | 创建演练沙箱（基于快照，与正式数据完全隔离） | `{"snapshot": {...}, "name": 可选}` |
+| GET | `/api/sandbox` | 列出所有演练沙箱 | `limit`(可选，默认 100) |
+| GET | `/api/sandbox/<sandbox_id>` | 查询沙箱详情（含演练结果和数据统计） | — |
+| POST | `/api/sandbox/<sandbox_id>/precheck` | 沙箱内运行预检（不落盘，仅产出报告） | — |
+| POST | `/api/sandbox/<sandbox_id>/dryrun` | 沙箱内运行 Dry-Run（不改变正式数据） | — |
+| POST | `/api/sandbox/<sandbox_id>/import` | 沙箱内执行正式导入（仅写入沙箱独立目录） | — |
+| POST | `/api/sandbox/<sandbox_id>/rollback` | 沙箱内回滚导入（幂等，冲突时拦截） | — |
+| POST | `/api/sandbox/<sandbox_id>/restart-verify` | 沙箱重启验证（数据一致性 + 配置过期检查） | — |
+| GET | `/api/sandbox/<sandbox_id>/export` | 导出完整演练结果（含所有阶段报告和最终结论） | — |
+| DELETE | `/api/sandbox/<sandbox_id>` | 销毁演练沙箱（清理独立目录和元数据） | — |
+
 ---
 
 ## 馆藏批量导入导出接口详解
@@ -1807,3 +1822,447 @@ python demo9.py
 - 合法书与非法书混合全量拦截（测试 17、27）
 
 一键运行：`python demo9.py`
+
+
+---
+
+## 导入演练沙箱接口详解（v4.0 新增）
+
+在正式导入快照到生产环境之前，你可以先把完整快照导进**独立沙箱**里跑完整演练流程（预检 → Dry-Run → 正式导入 → 回滚 → 重启验证），确认一切正常后再决定是否动正式数据。沙箱与现有 `data/` 目录完全隔离，演练过程中的所有批次、冲突、日志摘要和最终结论都独立落盘，不会串进正式环境。
+
+### 核心特性
+
+1. **完全隔离**：每个沙箱有独立目录 `sandbox/{sandbox_id}/`，存放独立的 5 个 JSON 数据文件（books/reservations/blacklist/logs/batches）+ 演练结果 `drill_results.json`，与正式 `data/` 目录零交互
+2. **完整演练链路**：预检、Dry-Run、正式导入、回滚、重启验证五阶段全流程闭环
+3. **快照去重**：同一快照内容重复创建会被 409 拦截（SHA256 哈希比对）
+4. **配置过期检测**：正式环境 books 配置变更后，旧沙箱标记为 stale，预检/Dry-Run/导入全部返回 410，防止基于过时配置的演练结论被误用
+5. **并发控制**：每个沙箱独立的 `threading.RLock`，加全局锁管理沙箱元数据
+6. **重启恢复**：服务启动时自动扫描异常中断状态（`running_*`）的沙箱，重置为 `ready`
+7. **演练结果独立落盘**：`drill_results.json` 保存所有阶段的 report/conflicts/conclusion，不写入正式 logs/batches
+8. **API 全生命周期管理**：创建、列表、详情、预检、Dry-Run、导入、回滚、重启验证、导出、销毁 10 个接口
+
+### 沙箱状态机
+
+| 状态 | 说明 |
+|------|------|
+| `ready` | 沙箱已创建，可执行预检/导入 |
+| `running_precheck` | 正在执行预检 |
+| `running_dryrun` | 正在执行 Dry-Run |
+| `running_import` | 正在执行正式导入 |
+| `has_conflicts` | 预检/Dry-Run 发现冲突，不可导入 |
+| `imported` | 沙箱内已完成正式导入 |
+| `rolled_back` | 沙箱内导入已回滚 |
+| `failed` | 演练过程中出现错误 |
+| `destroyed` | 沙箱已销毁（仅元数据短暂保留） |
+
+---
+
+### POST `/api/sandbox` - 创建演练沙箱
+
+**功能说明**：基于完整快照创建一个独立演练沙箱，快照数据仅写入沙箱目录，不触碰正式 `data/`。
+
+**请求体**：
+
+```json
+{
+  "name": "可选的沙箱名称",
+  "snapshot": {
+    "version": "2.0",
+    "type": "full_snapshot",
+    "exported_at": "...",
+    "books": [...],
+    "active_reservations": [...],
+    "blacklist": [...],
+    "logs": [...]
+  }
+}
+```
+
+**成功响应**（HTTP 201）：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "sandbox_id": "uuid",
+    "name": "演练测试1",
+    "status": "ready",
+    "created_at": "2026-...",
+    "snapshot_hash": "sha256...",
+    "config_signature": "sha256...",
+    "config_stale": false,
+    "snapshot_counts": {
+      "books": 2,
+      "active_reservations": 2,
+      "blacklist": 1,
+      "logs": 2
+    },
+    "data_counts": {"books": 0, "reservations": 0, "blacklist": 0, "logs": 1, "batches": 0},
+    "drill_results": {
+      "final_conclusion": "pending",
+      "conflicts": [],
+      "precheck_report": null,
+      "dryrun_report": null,
+      "import_report": null,
+      "imported_counts": null,
+      "rollback_result": null,
+      "restart_verification": null
+    }
+  }
+}
+```
+
+**错误响应**：
+- HTTP 400：快照格式非法（返回 error 列表）
+- HTTP 409：相同快照的沙箱已存在
+
+---
+
+### GET `/api/sandbox` - 列出所有演练沙箱
+
+**Query 参数**：
+- `limit`: 可选，返回数量上限，默认 100
+
+**响应示例**（HTTP 200）：
+
+```json
+{
+  "ok": true,
+  "data": [
+    {
+      "sandbox_id": "uuid",
+      "name": "演练测试1",
+      "status": "ready",
+      "created_at": "2026-...",
+      "snapshot_counts": {...},
+      "config_stale": false,
+      "final_conclusion": "pending"
+    }
+  ]
+}
+```
+
+---
+
+### GET `/api/sandbox/<sandbox_id>` - 沙箱详情
+
+返回沙箱完整信息，包括当前数据统计（`data_counts`）、完整演练结果（`drill_results`）、配置过期状态（`config_stale`）。
+
+**错误响应**：HTTP 404 沙箱不存在
+
+---
+
+### POST `/api/sandbox/<sandbox_id>/precheck` - 沙箱预检
+
+在沙箱内对快照执行预检，产出完整预检报告但**不落盘任何业务数据**。与正式 `POST /api/snapshot/precheck` 的报告结构完全一致。
+
+**响应示例**（HTTP 200）：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "can_import": true,
+    "status": "ready",
+    "books": {"will_add": 2, "will_update": 0, "conflicts": []},
+    "reservations": {...},
+    "blacklist": {...},
+    "logs": {...},
+    "summary": {...}
+  }
+}
+```
+
+**错误响应**：
+- HTTP 404：沙箱不存在
+- HTTP 410：正式配置已变更（`config_stale=true`），此沙箱已过期不可用
+
+---
+
+### POST `/api/sandbox/<sandbox_id>/dryrun` - 沙箱 Dry-Run
+
+在沙箱内模拟正式导入流程，执行完整冲突检测和校验，但**仅落盘演练结果**，不改变沙箱数据文件（除 drill_results.json）。
+
+**成功响应**（HTTP 200）：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "counts": {"books": 2, "active_reservations": 2, "blacklist": 1, "logs": 2},
+    "report": {...}
+  }
+}
+```
+
+**错误响应**：
+- HTTP 400：快照格式错误
+- HTTP 404：沙箱不存在
+- HTTP 409：发现冲突，响应包含 `conflicts` 列表
+- HTTP 410：正式配置已变更
+
+---
+
+### POST `/api/sandbox/<sandbox_id>/import` - 沙箱正式导入
+
+在沙箱独立目录内执行完整正式导入：写入 books/reservations/blacklist/logs，并生成沙箱独立的批次记录（不写入正式 `data/batches.json`）。
+
+**成功响应**（HTTP 200）：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "counts": {"books": 2, "active_reservations": 2, "blacklist": 1, "logs": 2},
+    "report": {...},
+    "batch_id": "沙箱内部批次ID-uuid",
+    "final_conclusion": "imported_success"
+  }
+}
+```
+
+**错误响应**：
+- HTTP 400：格式错误
+- HTTP 404：沙箱不存在
+- HTTP 409：冲突（含 conflicts 列表）或已执行过正式导入
+- HTTP 410：正式配置已变更
+
+---
+
+### POST `/api/sandbox/<sandbox_id>/rollback` - 沙箱回滚
+
+将沙箱内导入的数据全部回滚。支持幂等调用，回滚前检查沙箱内数据是否在导入后被修改过，有冲突则明确拦截。
+
+**成功响应**（HTTP 200）：
+
+```json
+{
+  "ok": true,
+  "rollback_count": 7,
+  "already_rolled_back": false,
+  "status": "rolled_back",
+  "final_conclusion": "rolled_back_success"
+}
+```
+
+**错误响应**：
+- HTTP 404：沙箱不存在
+- HTTP 409：回滚冲突（数据在导入后被修改过），响应含 `conflicts` 列表
+
+---
+
+### POST `/api/sandbox/<sandbox_id>/restart-verify` - 沙箱重启验证
+
+对沙箱数据执行一致性校验，确认导入/回滚后的各数据文件状态正确，并检查正式配置是否已变更。
+
+**成功响应**（HTTP 200）：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "status": "imported",
+    "verified_at": "2026-...",
+    "config_stale": false,
+    "data_counts": {"books": 2, "reservations": 2, "blacklist": 1, "logs": ..., "batches": 1},
+    "consistency_ok": true
+  }
+}
+```
+
+**错误响应**：HTTP 404 沙箱不存在
+
+---
+
+### GET `/api/sandbox/<sandbox_id>/export` - 导出演练结果
+
+导出沙箱的完整演练报告，包含所有阶段的执行结果、冲突明细、统计摘要和最终结论。可作为演练归档。
+
+**响应示例**（HTTP 200）：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "sandbox_id": "uuid",
+    "name": "演练测试1",
+    "status": "imported",
+    "created_at": "...",
+    "snapshot_counts": {...},
+    "data_counts": {...},
+    "config_stale": false,
+    "drill_results": {
+      "final_conclusion": "imported_success",
+      "precheck_report": {...},
+      "dryrun_report": {...},
+      "import_report": {...},
+      "imported_counts": {...},
+      "rollback_result": null,
+      "restart_verification": {...},
+      "conflicts": []
+    }
+  }
+}
+```
+
+---
+
+### DELETE `/api/sandbox/<sandbox_id>` - 销毁演练沙箱
+
+删除沙箱独立目录下的所有数据文件和演练结果，同时从沙箱元数据中移除。**不可逆操作**。
+
+**成功响应**（HTTP 200）：
+
+```json
+{
+  "ok": true,
+  "message": "沙箱 <id> 已销毁"
+}
+```
+
+**错误响应**：HTTP 404 沙箱不存在
+
+---
+
+### 导入演练沙箱使用指南
+
+#### 标准演练流程
+
+```bash
+# 1. 导出待迁移的源环境快照
+curl http://源环境:5000/api/snapshot/export > snapshot.json
+
+# 2. 在目标环境创建演练沙箱（不动正式数据）
+curl -X POST http://目标环境:5000/api/sandbox \
+  -H "Content-Type: application/json" \
+  -d "{\"name\": \"生产迁移演练\", \"snapshot\": $(cat snapshot.json)}"
+
+# 3. 预检
+curl -X POST http://目标环境:5000/api/sandbox/<sandbox_id>/precheck
+
+# 4. Dry-Run
+curl -X POST http://目标环境:5000/api/sandbox/<sandbox_id>/dryrun
+
+# 5. 沙箱内正式导入（确认各阶段报告无误后）
+curl -X POST http://目标环境:5000/api/sandbox/<sandbox_id>/import
+
+# 6. 重启验证
+curl -X POST http://目标环境:5000/api/sandbox/<sandbox_id>/restart-verify
+
+# 7. 确认没问题 → 销毁沙箱，然后正式导入
+curl -X DELETE http://目标环境:5000/api/sandbox/<sandbox_id>
+curl -X POST http://目标环境:5000/api/snapshot/import -d "$(cat snapshot.json)"
+
+# 或者：演练发现问题 → 回滚 → 导出演练报告 → 销毁
+curl -X POST http://目标环境:5000/api/sandbox/<sandbox_id>/rollback
+curl http://目标环境:5000/api/sandbox/<sandbox_id>/export > drill-report.json
+curl -X DELETE http://目标环境:5000/api/sandbox/<sandbox_id>
+```
+
+#### 目录结构
+
+```
+sandbox/
+├── sandboxes.json              # 沙箱元数据总表
+├── {sandbox_id}/
+│   ├── books.json              # 沙箱独立馆藏（与 data/ 隔离）
+│   ├── reservations.json       # 沙箱独立预约
+│   ├── blacklist.json          # 沙箱独立黑名单
+│   ├── logs.json               # 沙箱独立日志
+│   ├── batches.json            # 沙箱独立批次
+│   └── drill_results.json      # 演练全流程结果（所有阶段）
+└── {另一个sandbox_id}/
+    └── ...
+```
+
+**关键保证**：
+- 沙箱内的 `books/reservations/blacklist/logs/batches` 与正式 `data/` 目录物理隔离，绝不互相写入
+- 沙箱批次仅存在于 `sandbox/{id}/batches.json`，正式 `data/batches.json` 完全不受影响
+- 沙箱日志仅存在于 `sandbox/{id}/logs.json`，正式 `data/logs.json` 完全不受影响
+- `drill_results.json` 是演练结论的唯一真相来源，包含所有阶段报告和最终结论
+
+---
+
+### 一键运行沙箱模块测试
+
+```bash
+python demo10.py
+```
+
+该脚本覆盖以下 24 个测试场景：
+1. 创建演练沙箱 API 存在（201 + 完整响应结构）
+2. 沙箱目录与数据隔离 - 正式 data/ 未被污染
+3. 相同快照重复创建被 409 拦截
+4. 沙箱列表 API（含 config_stale 字段）
+5. 沙箱详情 API（含 drill_results + data_counts）
+6. 沙箱预检 API - 报告正确 + 不落盘正式数据 + drill_results 已落盘
+7. 沙箱 Dry-Run API - 不改变正式数据
+8. 沙箱正式导入 API - 沙箱内落盘，正式 data/ 哈希不变，final_conclusion 正确
+9. 沙箱回滚 API - 数据清零，状态正确
+10. 沙箱回滚幂等性 - 重复回滚返回 already_rolled_back
+11. 沙箱重启验证 API - 数据一致性 + 配置过期检查
+12. 沙箱导出演练结果 API - 完整报告归档
+13. 服务重启后沙箱记录完整保留（元数据 + drill_results）
+14. 重启后仍可继续查询和操作沙箱
+15. 沙箱销毁 API - 目录删除，列表清空
+16. 正式配置切换后旧沙箱不可误用（预检/Dry-Run/导入全部返回 410）
+17. 带冲突快照的沙箱预检/Dry-Run/导入正确处理并落盘 final_conclusion=has_conflicts
+18. 多沙箱互不影响，全部不污染正式数据
+19. 非法快照格式被 400 拦截
+20. 不存在的沙箱返回 404
+21. 完整生命周期 end-to-end（预检→dryrun→导入→验证→重启→回滚→导出→销毁）
+22. 演练结果 drill_results.json 独立落盘，正式 batches.json 不含沙箱批次
+23. 沙箱列表 limit 参数
+24. 已导入沙箱不能重复导入（409）
+
+---
+
+## 本次新增要点（对应 v4.0）
+
+**导入演练沙箱 - 隔离环境中的完整导入预演**
+
+### 1. 完全隔离的沙箱环境
+
+每个演练沙箱拥有完全独立的目录 `sandbox/{sandbox_id}/`，内部存放：
+- `books.json` / `reservations.json` / `blacklist.json` / `logs.json` / `batches.json`：5 个独立数据文件
+- `drill_results.json`：演练全流程结果归档
+
+沙箱数据与正式 `data/` 目录物理隔离，线程安全，并发演练互不影响。
+
+### 2. 五阶段完整演练链路
+
+1. **预检（precheck）**：不落盘，产出完整差异报告
+2. **Dry-Run**：模拟正式导入，执行全量冲突检测，仅落盘演练结论
+3. **正式导入（import）**：在沙箱内完整落盘 5 个数据文件 + 生成沙箱独立批次
+4. **回滚（rollback）**：沙箱内原子回滚，幂等，有冲突时拦截
+5. **重启验证（restart-verify）**：数据一致性校验 + 配置过期检查
+
+### 3. 快照去重
+
+对快照整体做 `SHA256(sorted JSON)`，创建前比对已有沙箱的 `snapshot_hash`，相同内容重复创建返回 HTTP 409。
+
+### 4. 配置过期检测
+
+创建沙箱时记录正式环境 `books` 列表的 SHA256 签名作为 `config_signature`。每次预检/Dry-Run/导入前比对，签名不一致时返回 HTTP 410（Gone），响应标记 `config_stale=true`，防止基于过时配置的演练结论被误用。
+
+### 5. 重启恢复机制
+
+- 沙箱元数据持久化在 `sandbox/sandboxes.json`
+- 服务启动时自动扫描状态为 `running_precheck` / `running_dryrun` / `running_import` 的异常中断沙箱，统一重置为 `ready`
+- `recover_sandboxes_on_startup()` 在 `main()` 中被调用，控制台打印恢复明细
+
+### 6. 并发控制
+
+- 全局 `_global_lock` 保护沙箱元数据（sandboxes.json）读写
+- 每个沙箱独立的 `_sandbox_locks[sandbox_id] = threading.RLock()` 保护沙箱内操作
+- 避免 monkey-patch 全局 DATA_DIR 带来的线程安全风险
+
+### 7. 覆盖的关键场景
+
+1. **标准演练流程**：预检 → Dry-Run → 导入 → 验证 → 回滚 → 导出 → 销毁，全链路闭环
+2. **服务重启恢复**：异常中断的沙箱自动重置为 ready，演练记录完整保留
+3. **配置切换隔离**：正式 books 变更后旧沙箱返回 410，所有写操作被拦截
+4. **零污染保证**：全程 SHA256 比对正式 data/ 下 5 个 JSON 文件，确认哈希零变化
+5. **冲突快照演练**：带冲突的快照在沙箱内预检/Dry-Run/导入正确处理，final_conclusion 落盘
+6. **多沙箱并发**：多个沙箱同时运行互不影响，销毁一个不影响其他
+7. **演练结果归档**：`drill_results.json` 独立持久化所有阶段结论，可导出用于审计

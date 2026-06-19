@@ -3,6 +3,7 @@ import threading
 from flask import Flask, request, jsonify
 
 import service
+import sandbox_service
 
 app = Flask(__name__)
 
@@ -295,6 +296,127 @@ def api_trigger_expire():
     return jsonify({"ok": True, "expired_count": count}), 200
 
 
+@app.route("/api/sandbox", methods=["POST"])
+def api_create_sandbox():
+    d = request.get_json(force=True)
+    snapshot = d.get("snapshot")
+    name = d.get("name")
+    if not snapshot:
+        return jsonify({"ok": False, "error": "缺少 snapshot 字段"}), 400
+    result, err = sandbox_service.create_sandbox(snapshot, name=name)
+    if err:
+        if isinstance(err, list):
+            return jsonify({"ok": False, "error": err}), 400
+        if isinstance(err, str) and "已存在相同快照" in err:
+            return jsonify({"ok": False, "error": err}), 409
+        return jsonify({"ok": False, "error": err}), 400
+    full_result, _ = sandbox_service.get_sandbox(result["sandbox_id"])
+    return jsonify({"ok": True, "data": full_result}), 201
+
+
+@app.route("/api/sandbox", methods=["GET"])
+def api_list_sandboxes():
+    limit = request.args.get("limit", 100, type=int)
+    sandboxes = sandbox_service.list_sandboxes(limit=limit)
+    return jsonify({"ok": True, "data": sandboxes}), 200
+
+
+@app.route("/api/sandbox/<sandbox_id>", methods=["GET"])
+def api_get_sandbox(sandbox_id):
+    result, err = sandbox_service.get_sandbox(sandbox_id)
+    if err:
+        return jsonify({"ok": False, "error": err}), 404
+    return jsonify({"ok": True, "data": result}), 200
+
+
+@app.route("/api/sandbox/<sandbox_id>/precheck", methods=["POST"])
+def api_sandbox_precheck(sandbox_id):
+    result, err = sandbox_service.run_sandbox_precheck(sandbox_id)
+    if err:
+        if isinstance(err, list):
+            return jsonify({"ok": False, "error": err}), 400
+        if str(err) == "沙箱不存在":
+            return jsonify({"ok": False, "error": err}), 404
+        if "配置已变更" in str(err):
+            return jsonify({"ok": False, "error": err, "config_stale": True}), 410
+        return jsonify({"ok": False, "error": err}), 400
+    return jsonify({"ok": True, "data": result}), 200
+
+
+@app.route("/api/sandbox/<sandbox_id>/dryrun", methods=["POST"])
+def api_sandbox_dryrun(sandbox_id):
+    result, err = sandbox_service.run_sandbox_dryrun(sandbox_id)
+    if err:
+        if str(err) == "沙箱不存在":
+            return jsonify({"ok": False, "error": err}), 404
+        if isinstance(err, list):
+            if all(isinstance(e, dict) and "type" in e for e in err):
+                return jsonify({"ok": False, "error": "沙箱 Dry-Run 发现冲突", "conflicts": err}), 409
+            return jsonify({"ok": False, "error": err}), 400
+        if "配置已变更" in str(err):
+            return jsonify({"ok": False, "error": err, "config_stale": True}), 410
+        if isinstance(err, dict):
+            return jsonify({"ok": False, "error": "沙箱 Dry-Run 发现冲突", "conflicts": err}), 409
+        return jsonify({"ok": False, "error": err}), 400
+    return jsonify({"ok": True, "data": result}), 200
+
+
+@app.route("/api/sandbox/<sandbox_id>/import", methods=["POST"])
+def api_sandbox_import(sandbox_id):
+    result, err = sandbox_service.run_sandbox_import(sandbox_id)
+    if err:
+        if str(err) == "沙箱不存在":
+            return jsonify({"ok": False, "error": err}), 404
+        if isinstance(err, list):
+            if all(isinstance(e, dict) and "type" in e for e in err):
+                return jsonify({"ok": False, "error": "沙箱导入发现冲突", "conflicts": err}), 409
+            return jsonify({"ok": False, "error": err}), 400
+        if "配置已变更" in str(err):
+            return jsonify({"ok": False, "error": err, "config_stale": True}), 410
+        if isinstance(err, dict):
+            return jsonify({"ok": False, "error": "沙箱导入发现冲突", "conflicts": err}), 409
+        if "已执行过正式导入" in str(err):
+            return jsonify({"ok": False, "error": err}), 409
+        return jsonify({"ok": False, "error": err}), 400
+    return jsonify({"ok": True, "data": result}), 200
+
+
+@app.route("/api/sandbox/<sandbox_id>/rollback", methods=["POST"])
+def api_sandbox_rollback(sandbox_id):
+    result, err = sandbox_service.run_sandbox_rollback(sandbox_id)
+    if err:
+        if str(err) == "沙箱不存在":
+            return jsonify({"ok": False, "error": err}), 404
+        if isinstance(err, dict) and "conflicts" in err:
+            return jsonify({"ok": False, **err}), 409
+        return jsonify({"ok": False, "error": err}), 400
+    return jsonify({"ok": True, **result}), 200
+
+
+@app.route("/api/sandbox/<sandbox_id>/restart-verify", methods=["POST"])
+def api_sandbox_restart_verify(sandbox_id):
+    result, err = sandbox_service.run_sandbox_restart_verify(sandbox_id)
+    if err:
+        return jsonify({"ok": False, "error": err}), 404
+    return jsonify({"ok": True, "data": result}), 200
+
+
+@app.route("/api/sandbox/<sandbox_id>/export", methods=["GET"])
+def api_sandbox_export(sandbox_id):
+    result, err = sandbox_service.export_sandbox_results(sandbox_id)
+    if err:
+        return jsonify({"ok": False, "error": err}), 404
+    return jsonify({"ok": True, "data": result}), 200
+
+
+@app.route("/api/sandbox/<sandbox_id>", methods=["DELETE"])
+def api_destroy_sandbox(sandbox_id):
+    ok, err = sandbox_service.destroy_sandbox(sandbox_id)
+    if err:
+        return jsonify({"ok": False, "error": err}), 404
+    return jsonify({"ok": True, "message": f"沙箱 {sandbox_id} 已销毁"}), 200
+
+
 def main():
     import store as _store
     print(f"[启动] 数据目录: {_store.DATA_DIR}")
@@ -302,6 +424,11 @@ def main():
     service.process_expired()
     print("[启动] 过期检查完成，启动定时过期扫描（每10秒）")
     _schedule_expire()
+    recovered = sandbox_service.recover_sandboxes_on_startup()
+    if recovered:
+        print(f"[启动] 恢复了 {len(recovered)} 个异常中断的演练沙箱")
+        for r in recovered:
+            print(f"  - 沙箱 {r['sandbox_id']}: {r['previous_status']} -> {r['new_status']}")
     app.run(host="127.0.0.1", port=5000, debug=False)
 
 
