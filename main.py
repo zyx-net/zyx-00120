@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify
 
 import service
 import sandbox_service
+import checkup_service
 
 app = Flask(__name__)
 
@@ -417,9 +418,63 @@ def api_destroy_sandbox(sandbox_id):
     return jsonify({"ok": True, "message": f"沙箱 {sandbox_id} 已销毁"}), 200
 
 
+@app.route("/api/checkup", methods=["POST"])
+def api_create_checkup():
+    d = request.get_json(force=True)
+    snapshot = d.get("snapshot")
+    if not snapshot:
+        return jsonify({"ok": False, "error": "缺少 snapshot 字段"}), 400
+    operator = d.get("operator")
+    name = d.get("name")
+    record, err = checkup_service.create_checkup(snapshot, operator=operator, name=name)
+    if err:
+        if "已存在" in str(err):
+            return jsonify({"ok": False, "error": err}), 409
+        return jsonify({"ok": False, "error": err}), 400
+    full_result, _ = checkup_service.get_checkup(record["record_id"])
+    return jsonify({"ok": True, "data": full_result}), 201
+
+
+@app.route("/api/checkup", methods=["GET"])
+def api_list_checkups():
+    limit = request.args.get("limit", 100, type=int)
+    records = checkup_service.list_checkups(limit=limit)
+    return jsonify({"ok": True, "data": records}), 200
+
+
+@app.route("/api/checkup/<record_id>", methods=["GET"])
+def api_get_checkup(record_id):
+    result, err = checkup_service.get_checkup(record_id)
+    if err:
+        return jsonify({"ok": False, "error": err}), 404
+    return jsonify({"ok": True, "data": result}), 200
+
+
+@app.route("/api/checkup/<record_id>/export", methods=["GET"])
+def api_export_checkup(record_id):
+    report, err = checkup_service.export_checkup_report(record_id)
+    if err:
+        return jsonify({"ok": False, "error": err}), 404
+    return jsonify({"ok": True, "data": report}), 200
+
+
+@app.route("/api/checkup/<record_id>/void", methods=["POST"])
+def api_void_checkup(record_id):
+    d = request.get_json(force=True) if request.is_json else {}
+    operator = d.get("operator")
+    record, err = checkup_service.void_checkup(record_id, operator=operator)
+    if err:
+        if "已作废" in str(err):
+            return jsonify({"ok": False, "error": err}), 409
+        return jsonify({"ok": False, "error": err}), 404
+    return jsonify({"ok": True, "data": record}), 200
+
+
 def main():
     import store as _store
+    import checkup_store as _checkup_store
     print(f"[启动] 数据目录: {_store.DATA_DIR}")
+    print(f"[启动] 体检目录: {_checkup_store.CHECKUP_BASE_DIR}")
     print("[启动] 检查并处理过期预约...")
     service.process_expired()
     print("[启动] 过期检查完成，启动定时过期扫描（每10秒）")
@@ -429,6 +484,16 @@ def main():
         print(f"[启动] 恢复了 {len(recovered)} 个异常中断的演练沙箱")
         for r in recovered:
             print(f"  - 沙箱 {r['sandbox_id']}: {r['previous_status']} -> {r['new_status']}")
+    checkup_recovered = checkup_service.recover_checkups_on_startup()
+    if checkup_recovered:
+        print(f"[启动] 恢复了 {len(checkup_recovered)} 个异常中断的体检记录")
+        for r in checkup_recovered:
+            print(f"  - 体检 {r['record_id']}: {r['previous_status']} -> {r['new_status']}")
+    stale_invalidated = checkup_service.invalidate_stale_checkups()
+    if stale_invalidated:
+        print(f"[启动] 因配置变更失效了 {len(stale_invalidated)} 条体检记录")
+        for r in stale_invalidated:
+            print(f"  - 体检 {r['record_id']}: {r['previous_status']} -> {r['new_status']}")
     app.run(host="127.0.0.1", port=5000, debug=False)
 
 

@@ -103,6 +103,20 @@ python demo8.py
 python demo9.py
 ```
 
+快照体检中心回归测试（覆盖：
+- 创建体检记录：结构校验、必填字段核对、版本兼容、敏感配置检查
+- 查询详情、导出 JSON 报告、手动作废四条链路
+- 同一快照重复提交拦截、并发占用处理
+- 只读查看与作废操作的权限区分
+- 服务重启后继续查询
+- 配置切换后旧记录自动失效
+- 体检日志和结论单独落盘，不混入正式数据
+- 失败体检不污染正式数据）：
+
+```bash
+python demo10.py
+```
+
 ## 数据文件位置
 
 所有持久化数据以 UTF-8 JSON 格式存储在项目目录下的 `data/` 文件夹，服务重启后完整恢复。
@@ -115,7 +129,16 @@ python demo9.py
 | `data/logs.json` | 所有操作日志（包含成功与失败，支持按书目、读者过滤） |
 | `data/batches.json` | 导入批次记录（批次ID、状态、导入明细、回滚信息等） |
 
+体检相关数据存储在 `checkup/` 目录，与正式数据完全隔离：
+
+| 文件 | 内容 |
+|------|------|
+| `checkup/records.json` | 体检记录（record_id、快照哈希、体检状态、结论摘要等） |
+| `checkup/logs.json` | 体检操作日志（创建、导出、作废等操作，不混入正式日志） |
+| `checkup/conclusions.json` | 体检结论明细（结构校验、必填字段、版本兼容、敏感配置检查的详细结果） |
+
 要完全重置数据，只需删除 `data/` 目录下的所有 `.json` 文件并重启服务。
+要清除体检数据，删除 `checkup/` 目录下的所有 `.json` 文件即可。
 
 ## HTTP API 一览
 
@@ -201,6 +224,16 @@ python demo9.py
 | POST | `/api/sandbox/<sandbox_id>/restart-verify` | 沙箱重启验证（数据一致性 + 配置过期检查） | — |
 | GET | `/api/sandbox/<sandbox_id>/export` | 导出完整演练结果（含所有阶段报告和最终结论） | — |
 | DELETE | `/api/sandbox/<sandbox_id>` | 销毁演练沙箱（清理独立目录和元数据） | — |
+
+### 快照体检中心（v5.0 新增）
+
+| 方法 | 路径 | 说明 | 参数 |
+|------|------|------|------|
+| POST | `/api/checkup` | 创建体检记录（上传快照，执行结构校验、必填字段核对、版本兼容和敏感配置检查） | `{"snapshot": {...}, "operator": 可选, "name": 可选}` |
+| GET | `/api/checkup` | 列出所有体检记录（按时间倒序） | `limit`(可选，默认 100) |
+| GET | `/api/checkup/<record_id>` | 查询体检详情（只读，含结论明细） | — |
+| GET | `/api/checkup/<record_id>/export` | 导出 JSON 体检报告（只读，含完整结论和配置状态） | — |
+| POST | `/api/checkup/<record_id>/void` | 手动作废体检记录（需 operator，与只读操作区分） | `{"operator": 可选}` |
 
 ---
 
@@ -2186,7 +2219,7 @@ sandbox/
 ### 一键运行沙箱模块测试
 
 ```bash
-python demo10.py
+python demo9.py
 ```
 
 该脚本覆盖以下 24 个测试场景：
@@ -2266,3 +2299,327 @@ python demo10.py
 5. **冲突快照演练**：带冲突的快照在沙箱内预检/Dry-Run/导入正确处理，final_conclusion 落盘
 6. **多沙箱并发**：多个沙箱同时运行互不影响，销毁一个不影响其他
 7. **演练结果归档**：`drill_results.json` 独立持久化所有阶段结论，可导出用于审计
+
+---
+
+## 快照体检中心接口详解（v5.0 新增）
+
+### POST `/api/checkup` - 创建体检记录
+
+上传或选择一份演练快照，执行四项体检检查：结构校验、必填字段核对、版本兼容和敏感配置检查。检查通过后生成状态为 `passed` 的体检记录，存在阻断问题时生成状态为 `failed` 的记录。无论通过与否，体检日志和结论均单独落盘到 `checkup/` 目录，不混入正式演练数据。
+
+**请求体**：
+
+```json
+{
+  "snapshot": {
+    "version": "2.0",
+    "type": "full_snapshot",
+    "books": [...],
+    "active_reservations": [...],
+    "blacklist": [...],
+    "logs": [...]
+  },
+  "operator": "可选-操作者标识",
+  "name": "可选-体检记录名称"
+}
+```
+
+**体检通过响应**（HTTP 201）：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "record_id": "uuid",
+    "name": "体检-xxxxxxxx",
+    "snapshot_hash": "sha256...",
+    "status": "passed",
+    "operator": "tester",
+    "created_at": "2026-06-19T10:00:00+00:00",
+    "config_signature": "sha256...",
+    "snapshot_counts": {"books": 2, "active_reservations": 1, "blacklist": 1, "logs": 1},
+    "checkup_summary": {
+      "structural_errors": 0,
+      "required_field_errors": 0,
+      "version_warnings": 0,
+      "sensitive_warnings": 0,
+      "total_blocking": 0,
+      "total_warnings": 0,
+      "passed": true
+    },
+    "conclusion": {
+      "status": "passed",
+      "passed": true,
+      "structural_errors": [],
+      "required_field_errors": [],
+      "version_warnings": [],
+      "sensitive_warnings": [],
+      "created_at": "..."
+    }
+  }
+}
+```
+
+**体检失败响应**（HTTP 201，status 为 failed）：
+
+当快照存在结构错误、必填字段缺失、敏感配置问题时，体检状态为 `failed`，`conclusion` 中包含详细的错误明细。
+
+**重复提交响应**（HTTP 409）：
+
+```json
+{
+  "ok": false,
+  "error": "同一快照已存在有效体检记录: <record_id> (状态: passed)，请勿重复提交"
+}
+```
+
+**四项检查说明**：
+
+| 检查项 | 阻断性 | 说明 |
+|--------|--------|------|
+| 结构校验 | 阻断 | 版本号、快照类型、必需段落是否齐全且为列表 |
+| 必填字段核对 | 阻断 | 书目/预约/黑名单/日志各字段的类型和非空校验 |
+| 版本兼容 | 非阻断（告警） | 快照导出时间是否过旧（>30天）、目标环境是否已有相同书目 |
+| 敏感配置 | 阻断+告警 | 零值/负值（total_copies=0、borrow_days=0）为阻断；极端值（>10000等）为告警 |
+
+**敏感配置规则**：
+
+| 字段 | 规则 | 类型 | 告警码 |
+|------|------|------|--------|
+| `total_copies` | =0 | 阻断 | `sensitive_total_copies` |
+| `total_copies` | >10000 | 告警 | `sensitive_total_copies` |
+| `borrow_days` | =0 | 阻断 | `sensitive_borrow_days` |
+| `borrow_days` | >365 | 告警 | `sensitive_borrow_days` |
+| `retain_hours` | =0 | 告警 | `sensitive_retain_hours` |
+| `retain_hours` | >720 | 告警 | `sensitive_retain_hours` |
+
+---
+
+### GET `/api/checkup` - 列出体检记录
+
+按创建时间倒序返回所有体检记录。支持 `limit` 参数。
+
+**请求示例**：
+
+```bash
+curl http://127.0.0.1:5000/api/checkup?limit=20
+```
+
+**响应**（HTTP 200）：
+
+```json
+{
+  "ok": true,
+  "data": [
+    {
+      "record_id": "uuid",
+      "name": "体检-xxxxxxxx",
+      "snapshot_hash": "sha256...",
+      "status": "passed",
+      "created_at": "...",
+      "checkup_summary": {...}
+    }
+  ]
+}
+```
+
+---
+
+### GET `/api/checkup/<record_id>` - 查询体检详情
+
+只读查询，返回体检记录的完整信息和结论明细。不会修改任何数据。
+
+**请求示例**：
+
+```bash
+curl http://127.0.0.1:5000/api/checkup/<record_id>
+```
+
+**响应**（HTTP 200）：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "record_id": "uuid",
+    "status": "passed",
+    "config_stale": false,
+    "conclusion": {
+      "passed": true,
+      "structural_errors": [],
+      "required_field_errors": [],
+      "version_warnings": [...],
+      "sensitive_warnings": [...]
+    }
+  }
+}
+```
+
+当环境配置与体检时不同，`config_stale` 为 `true`，提示体检结论可能已失效。
+
+---
+
+### GET `/api/checkup/<record_id>/export` - 导出 JSON 体检报告
+
+只读导出，返回完整的 JSON 体检报告，包含结论明细、配置签名和导出时间。可用于归档和审计。
+
+**请求示例**：
+
+```bash
+curl http://127.0.0.1:5000/api/checkup/<record_id>/export > checkup-report.json
+```
+
+**响应**（HTTP 200）：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "report_id": "uuid",
+    "record_id": "uuid",
+    "name": "体检-xxxxxxxx",
+    "status": "passed",
+    "operator": "tester",
+    "created_at": "...",
+    "snapshot_counts": {...},
+    "snapshot_hash": "sha256...",
+    "config_signature": "sha256...",
+    "config_stale": false,
+    "checkup_summary": {...},
+    "conclusion": {...},
+    "exported_at": "..."
+  }
+}
+```
+
+当 `config_stale` 为 `true` 时，报告额外包含 `stale_warning` 字段。
+
+---
+
+### POST `/api/checkup/<record_id>/void` - 手动作废
+
+将体检记录标记为已作废。需要提供 `operator` 标识操作者，与只读查询操作区分。作废后同一快照可重新提交体检。
+
+**请求体**：
+
+```json
+{
+  "operator": "操作者标识"
+}
+```
+
+**成功响应**（HTTP 200）：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "record_id": "uuid",
+    "status": "voided",
+    "voided_at": "2026-06-19T10:30:00+00:00",
+    "voided_by": "admin"
+  }
+}
+```
+
+**重复作废**（HTTP 409）：
+
+```json
+{
+  "ok": false,
+  "error": "该体检记录已作废，不可重复操作"
+}
+```
+
+---
+
+### 快照体检中心使用指南
+
+#### 标准体检流程
+
+```bash
+# 1. 导出源环境快照
+curl http://源环境:5000/api/snapshot/export > snapshot.json
+
+# 2. 创建体检记录
+curl -X POST http://目标环境:5000/api/checkup \
+  -H "Content-Type: application/json" \
+  -d "{\"snapshot\": $(cat snapshot.json), \"operator\": \"migrator\", \"name\": \"生产迁移体检\"}"
+
+# 3. 查看体检详情
+curl http://目标环境:5000/api/checkup/<record_id>
+
+# 4. 导出体检报告归档
+curl http://目标环境:5000/api/checkup/<record_id>/export > checkup-report.json
+
+# 5. 体检通过后，再决定是否正式导入
+curl -X POST http://目标环境:5000/api/snapshot/import -d "$(cat snapshot.json)"
+
+# 6. 如体检结论过时（配置已变更），可作废后重新体检
+curl -X POST http://目标环境:5000/api/checkup/<record_id>/void \
+  -H "Content-Type: application/json" \
+  -d '{"operator": "admin"}'
+```
+
+#### 体检记录状态流转
+
+```
+创建 → passed（体检通过，无阻断项）
+     → failed（体检失败，有阻断项）
+     → expired（服务重启时检测到配置变更，自动失效）
+     → voided（手动作废）
+
+作废/过期后，同一快照可重新提交体检
+```
+
+#### 目录结构
+
+```
+checkup/
+├── records.json        # 体检记录（record_id、快照哈希、状态、结论摘要）
+├── logs.json           # 体检操作日志（创建、导出、作废等，不混入正式 logs.json）
+└── conclusions.json    # 体检结论明细（四项检查的详细结果）
+```
+
+**关键保证**：
+- 体检日志仅存在于 `checkup/logs.json`，正式 `data/logs.json` 完全不受影响
+- 体检结论仅存在于 `checkup/conclusions.json`，不混入正式演练数据
+- 体检失败不会修改 `data/` 目录下任何 JSON 文件
+- 服务重启后体检记录完整保留，可继续查询和导出
+- 配置切换后旧记录自动标记为 `expired`，防止过时结论被误用
+
+---
+
+### 一键运行体检中心测试
+
+```bash
+python demo10.py
+```
+
+该脚本覆盖以下 25 个测试场景：
+1. 创建体检记录 - 合法快照通过体检
+2. 查询体检详情 - 只读查看
+3. 导出 JSON 报告
+4. 同一快照重复提交被拦截
+5. 结构校验失败 - 缺少 version
+6. 必填字段核对失败 - 缺少 book_id
+7. 版本兼容性检查 - 快照导出时间过旧
+8. 敏感配置检查 - total_copies=0 和 borrow_days=0
+9. 手动作废体检记录
+10. 重复作废被拦截
+11. 查询不存在的记录返回 404
+12. 导出不存在的记录返回 404
+13. 作废不存在的记录返回 404
+14. 体检列表按时间倒序
+15. 体检日志和结论单独落盘，不混入正式数据
+16. 失败体检不污染正式数据
+17. 服务重启后体检记录可继续查询
+18. 配置切换后旧记录自动失效
+19. 作废后同一快照可重新提交
+20. 权限区分 - 只读查看 vs 作废操作
+21. 并发占用 - 同一快照快速提交两次
+22. 体检记录 limit 参数
+23. 缺少 snapshot 字段返回 400
+24. retain_hours=0 的敏感配置告警
+25. 完整链路 - 创建→查询→导出→作废→重新提交

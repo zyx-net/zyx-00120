@@ -6,12 +6,11 @@ import time
 import urllib.request
 import urllib.error
 import hashlib
-import shutil
 
 BASE = "http://127.0.0.1:5000"
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(PROJECT_DIR, "data")
-SANDBOX_DIR = os.path.join(PROJECT_DIR, "sandbox")
+CHECKUP_DIR = os.path.join(PROJECT_DIR, "checkup")
 
 
 def api(method, path, body=None):
@@ -22,25 +21,15 @@ def api(method, path, body=None):
         req.add_header("Content-Type", "application/json; charset=utf-8")
     try:
         with urllib.request.urlopen(req) as resp:
-            raw = resp.read().decode("utf-8")
-            if not raw.strip():
-                return {}, resp.status
-            return json.loads(raw), resp.status
+            return json.loads(resp.read().decode("utf-8")), resp.status
     except urllib.error.HTTPError as e:
-        raw = e.read().decode("utf-8")
-        if not raw.strip():
-            return {}, e.code
-        return json.loads(raw), e.code
+        return json.loads(e.read().decode("utf-8")), e.code
 
 
 def section(title):
     print(f"\n{'='*60}")
     print(f"  {title}")
     print(f"{'='*60}")
-
-
-def subsection(title):
-    print(f"\n  --- {title} ---")
 
 
 def assert_true(cond, msg):
@@ -67,14 +56,12 @@ def clear_data():
         p = os.path.join(DATA_DIR, f"{name}.json")
         if os.path.exists(p):
             os.remove(p)
-    print("  [INFO] 已清空 data/ 目录")
-
-
-def clear_sandbox():
-    if os.path.isdir(SANDBOX_DIR):
-        shutil.rmtree(SANDBOX_DIR, ignore_errors=True)
-    os.makedirs(SANDBOX_DIR, exist_ok=True)
-    print("  [INFO] 已清空 sandbox/ 目录")
+    if os.path.isdir(CHECKUP_DIR):
+        for name in ["records", "logs", "conclusions"]:
+            p = os.path.join(CHECKUP_DIR, f"{name}.json")
+            if os.path.exists(p):
+                os.remove(p)
+    print("  [INFO] 已清空 data/ 和 checkup/ 目录")
 
 
 def start_server():
@@ -118,544 +105,357 @@ def stop_server(proc):
     print("  [INFO] 服务已停止")
 
 
-def get_file_hash(filename, base_dir=None):
-    if base_dir is None:
-        base_dir = DATA_DIR
-    p = os.path.join(base_dir, filename)
+def get_data_file_hash(filename):
+    p = os.path.join(DATA_DIR, filename)
     if not os.path.exists(p):
         return None
     with open(p, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()
 
 
-def get_file_mtime(filename, base_dir=None):
-    if base_dir is None:
-        base_dir = DATA_DIR
-    p = os.path.join(base_dir, filename)
-    if not os.path.exists(p):
-        return None
-    return os.path.getmtime(p)
-
-
-def create_test_snapshot(book_prefix="BATCH", res_prefix="R-BATCH", bl_prefix="BL-BATCH"):
-    books = [
-        {"book_id": f"{book_prefix}-001", "title": "批次测试书1", "total_copies": 5, "borrow_days": 30, "retain_hours": 24},
-        {"book_id": f"{book_prefix}-002", "title": "批次测试书2", "total_copies": 3, "borrow_days": 14, "retain_hours": 12},
-    ]
-    reservations = [
-        {
-            "reservation_id": f"res-{book_prefix}-001-01",
-            "book_id": f"{book_prefix}-001",
-            "reader_id": f"{res_prefix}-001",
-            "status": "waiting",
-            "created_at": "2026-06-19T08:00:00+00:00",
-            "available_at": None,
-            "expire_at": None,
-            "borrowed_at": None,
-            "returned_at": None,
-        },
-        {
-            "reservation_id": f"res-{book_prefix}-001-02",
-            "book_id": f"{book_prefix}-001",
-            "reader_id": f"{res_prefix}-002",
-            "status": "available",
-            "created_at": "2026-06-19T07:00:00+00:00",
-            "available_at": "2026-06-19T07:00:00+00:00",
-            "expire_at": "2026-06-20T07:00:00+00:00",
-            "borrowed_at": None,
-            "returned_at": None,
-        },
-    ]
-    blacklist = [
-        {"reader_id": f"{bl_prefix}-001", "reason": "逾期未还", "added_at": "2026-06-18T10:00:00+00:00"},
-    ]
-    logs = [
-        {
-            "log_id": f"log-{book_prefix}-001",
-            "timestamp": "2026-06-19T07:00:00+00:00",
-            "action": "add_book",
-            "book_id": f"{book_prefix}-001",
-            "detail": "添加书目 批次测试书1",
-            "success": True,
-        },
-        {
-            "log_id": f"log-{book_prefix}-002",
-            "timestamp": "2026-06-19T08:00:00+00:00",
-            "action": "reserve",
-            "book_id": f"{book_prefix}-001",
-            "reader_id": f"{res_prefix}-001",
-            "detail": "预约成功，状态=waiting",
-            "success": True,
-        },
-    ]
+def create_valid_snapshot(prefix="CHK"):
     return {
         "version": "2.0",
         "type": "full_snapshot",
-        "books": books,
-        "active_reservations": reservations,
-        "blacklist": blacklist,
-        "logs": logs,
+        "books": [
+            {"book_id": f"{prefix}-001", "title": "体检测试书1", "total_copies": 5, "borrow_days": 30, "retain_hours": 24},
+            {"book_id": f"{prefix}-002", "title": "体检测试书2", "total_copies": 3, "borrow_days": 14, "retain_hours": 12},
+        ],
+        "active_reservations": [
+            {
+                "reservation_id": f"res-{prefix}-001-01",
+                "book_id": f"{prefix}-001",
+                "reader_id": f"R-{prefix}-001",
+                "status": "waiting",
+                "created_at": "2026-06-19T08:00:00+00:00",
+                "available_at": None,
+                "expire_at": None,
+                "borrowed_at": None,
+                "returned_at": None,
+            },
+        ],
+        "blacklist": [
+            {"reader_id": f"BL-{prefix}-001", "reason": "逾期未还", "added_at": "2026-06-18T10:00:00+00:00"},
+        ],
+        "logs": [
+            {
+                "log_id": f"log-{prefix}-001",
+                "timestamp": "2026-06-19T07:00:00+00:00",
+                "action": "add_book",
+                "book_id": f"{prefix}-001",
+                "detail": "添加书目",
+                "success": True,
+            },
+        ],
     }
 
 
 def main():
-    section("导入演练沙箱完整回归测试 (demo10)")
+    section("快照体检中心完整回归测试 (demo10)")
 
-    print("\n[准备] 清空数据、沙箱目录并启动服务")
+    print("\n[准备] 清空数据并启动服务")
     clear_data()
-    clear_sandbox()
     proc = start_server()
 
-    sandbox_id_1 = None
-    sandbox_id_2 = None
-
     try:
-        section("测试1: 创建演练沙箱 API 存在")
-        snapshot = create_test_snapshot("SANDBOX-A")
-        r, status = api("POST", "/api/sandbox", {"snapshot": snapshot, "name": "测试演练A"})
-        assert_equal(status, 201, "POST /api/sandbox 返回 201")
+        section("测试1: 创建体检记录 - 合法快照通过体检")
+        snapshot = create_valid_snapshot("PASS")
+        r, status = api("POST", "/api/checkup", {"snapshot": snapshot, "operator": "tester", "name": "合法快照体检"})
+        assert_equal(status, 201, "创建体检记录返回 201")
         assert_true(r.get("ok"), "响应 ok=true")
-        assert_true("data" in r, "响应包含 data")
-        data = r["data"]
-        sandbox_id_1 = data["sandbox_id"]
-        assert_true(sandbox_id_1 and len(sandbox_id_1) > 0, "sandbox_id 非空")
-        assert_equal(data["status"], "ready", "初始状态为 ready")
-        assert_equal(data["name"], "测试演练A", "名称正确")
-        assert_equal(data["snapshot_counts"]["books"], 2, "snapshot_counts.books=2")
-        assert_equal(data["snapshot_counts"]["active_reservations"], 2, "snapshot_counts.active_reservations=2")
-        assert_equal(data["snapshot_counts"]["blacklist"], 1, "snapshot_counts.blacklist=1")
-        assert_equal(data["snapshot_counts"]["logs"], 2, "snapshot_counts.logs=2")
-        assert_true("snapshot_hash" in data, "包含 snapshot_hash")
-        print(f"  [INFO] 创建的沙箱ID: {sandbox_id_1}")
+        record = r["data"]
+        assert_true("record_id" in record, "包含 record_id")
+        assert_equal(record["status"], "passed", "体检状态为 passed")
+        assert_equal(record["checkup_summary"]["passed"], True, "checkup_summary.passed=true")
+        assert_equal(record["checkup_summary"]["total_blocking"], 0, "无阻断项")
+        assert_equal(record["operator"], "tester", "操作者正确")
+        assert_equal(record["name"], "合法快照体检", "名称正确")
+        record_id = record["record_id"]
+        print(f"  [INFO] 体检记录ID: {record_id}")
 
-        section("测试2: 沙箱目录与数据隔离 - 正式 data/ 未被污染")
-        prod_books = api("GET", "/api/books")[0]["data"]
-        assert_equal(len(prod_books), 0, "正式环境 books 仍为空（沙箱隔离）")
-        prod_queues = api("GET", "/api/queue/SANDBOX-A-001")[0]
-        assert_true(prod_queues.get("ok"), "正式环境队列查询正常返回")
-        assert_equal(len(prod_queues.get("data", [])), 0, "正式环境预约队列为空")
-        prod_bl = api("GET", "/api/blacklist")[0]["data"]
-        assert_equal(len(prod_bl), 0, "正式环境黑名单为空")
-        prod_logs = api("GET", "/api/logs?limit=1000")[0]["data"]
-        sandbox_log_count = sum(1 for l in prod_logs if l.get("book_id") and l["book_id"].startswith("SANDBOX-"))
-        assert_equal(sandbox_log_count, 0, "正式环境 logs 无沙箱相关业务日志")
-        prod_batches = api("GET", "/api/batches")[0]["data"]
-        assert_equal(len(prod_batches), 0, "正式环境 batches 为空")
+        section("测试2: 查询体检详情 - 只读查看")
+        r, status = api("GET", f"/api/checkup/{record_id}")
+        assert_equal(status, 200, "查询详情返回 200")
+        assert_true(r.get("ok"), "响应 ok=true")
+        detail = r["data"]
+        assert_equal(detail["record_id"], record_id, "record_id 匹配")
+        assert_equal(detail["status"], "passed", "状态为 passed")
+        assert_true("conclusion" in detail, "包含 conclusion")
+        assert_true("structural_errors" in detail["conclusion"], "conclusion 包含 structural_errors")
+        assert_true("required_field_errors" in detail["conclusion"], "conclusion 包含 required_field_errors")
+        assert_true("version_warnings" in detail["conclusion"], "conclusion 包含 version_warnings")
+        assert_true("sensitive_warnings" in detail["conclusion"], "conclusion 包含 sensitive_warnings")
 
-        section("测试3: 相同快照重复创建被拦截")
-        r2, status2 = api("POST", "/api/sandbox", {"snapshot": snapshot, "name": "重复尝试"})
-        assert_equal(status2, 409, "相同快照重复创建返回 409")
-        assert_true(not r2.get("ok"), "响应 ok=false")
-        assert_true("已存在相同快照" in str(r2.get("error", "")), "错误信息说明重复")
+        section("测试3: 导出 JSON 报告")
+        r, status = api("GET", f"/api/checkup/{record_id}/export")
+        assert_equal(status, 200, "导出报告返回 200")
+        assert_true(r.get("ok"), "响应 ok=true")
+        report = r["data"]
+        assert_equal(report["record_id"], record_id, "报告 record_id 匹配")
+        assert_true("report_id" in report, "报告包含 report_id")
+        assert_true("exported_at" in report, "报告包含 exported_at")
+        assert_equal(report["config_stale"], False, "配置未过期")
+        assert_true("conclusion" in report, "报告包含 conclusion")
+        assert_equal(report["conclusion"]["passed"], True, "报告结论为通过")
 
-        section("测试4: 沙箱列表 API")
-        r_list, _ = api("GET", "/api/sandbox")
-        assert_true(r_list.get("ok"), "列表 API ok=true")
-        assert_equal(len(r_list["data"]), 1, "沙箱列表有 1 条记录")
-        assert_equal(r_list["data"][0]["sandbox_id"], sandbox_id_1, "列表中的 sandbox_id 匹配")
-        assert_equal(r_list["data"][0]["status"], "ready", "列表中状态为 ready")
-        assert_true("config_stale" in r_list["data"][0], "列表包含 config_stale 字段")
-        assert_equal(r_list["data"][0]["config_stale"], False, "配置未过期")
+        section("测试4: 同一快照重复提交被拦截")
+        r2, status2 = api("POST", "/api/checkup", {"snapshot": snapshot, "operator": "tester2"})
+        assert_equal(status2, 409, "重复提交返回 409")
+        assert_true("已存在" in r2.get("error", ""), "错误信息提示已存在")
 
-        section("测试5: 沙箱详情 API")
-        r_detail, s_detail = api("GET", f"/api/sandbox/{sandbox_id_1}")
-        assert_equal(s_detail, 200, "详情 API 返回 200")
-        assert_true(r_detail.get("ok"), "详情 ok=true")
-        detail = r_detail["data"]
-        assert_equal(detail["sandbox_id"], sandbox_id_1, "详情 sandbox_id 匹配")
-        assert_true("drill_results" in detail, "包含 drill_results")
-        assert_true("data_counts" in detail, "包含 data_counts")
-        assert_equal(detail["data_counts"]["books"], 0, "沙箱初始 books 数量为 0")
-        assert_equal(detail["data_counts"]["reservations"], 0, "沙箱初始 reservations 数量为 0")
-        assert_equal(detail["data_counts"]["blacklist"], 0, "沙箱初始 blacklist 数量为 0")
-        assert_equal(detail["data_counts"]["logs"], 1, "沙箱 logs 有 1 条创建日志")
-        assert_equal(detail["data_counts"]["batches"], 0, "沙箱 batches 数量为 0")
+        section("测试5: 结构校验失败 - 缺少 version")
+        bad_snapshot = create_valid_snapshot("BAD1")
+        del bad_snapshot["version"]
+        r, status = api("POST", "/api/checkup", {"snapshot": bad_snapshot})
+        assert_equal(status, 201, "结构错误也创建记录（状态为 failed）")
+        record_failed = r["data"]
+        assert_equal(record_failed["status"], "failed", "体检状态为 failed")
+        assert_equal(record_failed["checkup_summary"]["passed"], False, "checkup_summary.passed=false")
+        assert_true(record_failed["checkup_summary"]["total_blocking"] > 0, "有阻断项")
+        failed_id = record_failed["record_id"]
 
-        section("测试6: 沙箱预检 API")
-        books_before_hash = get_file_hash("books.json")
-        logs_before_hash = get_file_hash("logs.json")
-        batches_before_hash = get_file_hash("batches.json")
+        detail_failed, _ = api("GET", f"/api/checkup/{failed_id}")
+        struct_errors = detail_failed["data"]["conclusion"]["structural_errors"]
+        assert_true(len(struct_errors) > 0, "conclusion 包含 structural_errors")
+        assert_true(any(e["code"] == "version_mismatch" for e in struct_errors), "包含 version_mismatch 错误")
 
-        r_pre, s_pre = api("POST", f"/api/sandbox/{sandbox_id_1}/precheck")
-        assert_equal(s_pre, 200, "预检返回 200")
-        assert_true(r_pre.get("ok"), "预检 ok=true")
-        pre_report = r_pre["data"]
-        assert_true("can_import" in pre_report, "预检报告包含 can_import")
-        assert_equal(pre_report["can_import"], True, "预检 can_import=true")
-        assert_equal(pre_report["summary"]["status"], "ready", "预检状态为 ready")
-        assert_equal(pre_report["summary"]["total_will_add"], 7, "will_add 共 7 条 (2+2+1+2)")
-        assert_equal(len(pre_report["details"]["books"]["will_add"]), 2, "books.will_add=2")
-        assert_equal(len(pre_report["details"]["active_reservations"]["will_add"]), 2, "reservations.will_add=2")
-        assert_equal(len(pre_report["details"]["blacklist"]["will_add"]), 1, "blacklist.will_add=1")
+        section("测试6: 必填字段核对失败 - 缺少 book_id")
+        bad_snapshot2 = create_valid_snapshot("BAD2")
+        del bad_snapshot2["books"][0]["book_id"]
+        r, status = api("POST", "/api/checkup", {"snapshot": bad_snapshot2})
+        assert_equal(status, 201, "必填字段缺失也创建记录")
+        record_bad2 = r["data"]
+        assert_equal(record_bad2["status"], "failed", "体检状态为 failed")
+        detail_bad2, _ = api("GET", f"/api/checkup/{record_bad2['record_id']}")
+        required_errors = detail_bad2["data"]["conclusion"]["required_field_errors"]
+        assert_true(len(required_errors) > 0, "conclusion 包含 required_field_errors")
 
-        assert_equal(get_file_hash("books.json"), books_before_hash, "预检不污染正式 books.json")
-        assert_equal(get_file_hash("logs.json"), logs_before_hash, "预检不污染正式 logs.json")
-        assert_equal(get_file_hash("batches.json"), batches_before_hash, "预检不污染正式 batches.json")
+        section("测试7: 版本兼容性检查 - 快照导出时间过旧")
+        old_snapshot = create_valid_snapshot("OLD")
+        old_snapshot["export_time"] = "2020-01-01T00:00:00+00:00"
+        r, status = api("POST", "/api/checkup", {"snapshot": old_snapshot, "name": "旧快照"})
+        assert_equal(status, 201, "旧快照创建记录")
+        record_old = r["data"]
+        assert_equal(record_old["status"], "passed", "旧快照仍可通过（告警非阻断）")
+        assert_true(record_old["checkup_summary"]["version_warnings"] > 0, "有版本告警")
+        detail_old, _ = api("GET", f"/api/checkup/{record_old['record_id']}")
+        version_warnings = detail_old["data"]["conclusion"]["version_warnings"]
+        assert_true(any(w["code"] == "snapshot_too_old" for w in version_warnings), "包含 snapshot_too_old 告警")
 
-        r_detail2, _ = api("GET", f"/api/sandbox/{sandbox_id_1}")
-        assert_true(r_detail2["data"]["drill_results"]["precheck_report"] is not None, "预检结果已落盘到 drill_results")
+        section("测试8: 敏感配置检查 - total_copies=0 和 borrow_days=0")
+        sensitive_snapshot = create_valid_snapshot("SENS")
+        sensitive_snapshot["books"][0]["total_copies"] = 0
+        sensitive_snapshot["books"][1]["borrow_days"] = 0
+        r, status = api("POST", "/api/checkup", {"snapshot": sensitive_snapshot})
+        assert_equal(status, 201, "敏感配置创建记录")
+        record_sens = r["data"]
+        assert_equal(record_sens["status"], "failed", "total_copies=0 导致体检失败")
+        assert_true(record_sens["checkup_summary"]["sensitive_errors"] > 0, "有敏感配置错误")
+        detail_sens, _ = api("GET", f"/api/checkup/{record_sens['record_id']}")
+        sensitive_errors = detail_sens["data"]["conclusion"]["sensitive_errors"]
+        sensitive_codes = [w["code"] for w in sensitive_errors]
+        assert_true("sensitive_total_copies" in sensitive_codes, "包含 sensitive_total_copies")
+        assert_true("sensitive_borrow_days" in sensitive_codes, "包含 sensitive_borrow_days")
 
-        section("测试7: 沙箱 Dry-Run API")
-        r_dry, s_dry = api("POST", f"/api/sandbox/{sandbox_id_1}/dryrun")
-        assert_equal(s_dry, 200, "Dry-Run 返回 200")
-        assert_true(r_dry.get("ok"), "Dry-Run ok=true")
-        dry_data = r_dry["data"]
-        assert_true("counts" in dry_data, "包含 counts")
-        assert_equal(dry_data["counts"]["books"], 2, "counts.books=2")
-        assert_true("report" in dry_data, "包含 report")
-        assert_equal(dry_data["report"]["can_import"], True, "Dry-Run report.can_import=true")
+        section("测试9: 手动作废体检记录")
+        void_id = record_old["record_id"]
+        r_void, status_void = api("POST", f"/api/checkup/{void_id}/void", {"operator": "admin"})
+        assert_equal(status_void, 200, "作废返回 200")
+        assert_true(r_void.get("ok"), "作废成功 ok=true")
+        voided = r_void["data"]
+        assert_equal(voided["status"], "voided", "状态变为 voided")
+        assert_equal(voided["voided_by"], "admin", "作废操作者正确")
+        assert_true("voided_at" in voided, "包含 voided_at")
 
-        prod_books_after_dry = api("GET", "/api/books")[0]["data"]
-        assert_equal(len(prod_books_after_dry), 0, "Dry-Run 后正式 books 仍为空")
+        section("测试10: 重复作废被拦截")
+        r_void2, status_void2 = api("POST", f"/api/checkup/{void_id}/void", {"operator": "admin"})
+        assert_equal(status_void2, 409, "重复作废返回 409")
+        assert_true("已作废" in r_void2.get("error", ""), "错误信息提示已作废")
 
-        r_detail3, _ = api("GET", f"/api/sandbox/{sandbox_id_1}")
-        assert_true(r_detail3["data"]["drill_results"]["dryrun_report"] is not None, "Dry-Run 结果已落盘")
+        section("测试11: 查询不存在的记录返回 404")
+        r, status = api("GET", "/api/checkup/nonexistent-id")
+        assert_equal(status, 404, "查询不存在记录返回 404")
 
-        section("测试8: 沙箱正式导入 API")
-        books_before_imp_hash = get_file_hash("books.json")
-        logs_before_imp_hash = get_file_hash("logs.json")
-        batches_before_imp_hash = get_file_hash("batches.json")
-        reservations_before_hash = get_file_hash("reservations.json")
-        blacklist_before_hash = get_file_hash("blacklist.json")
+        section("测试12: 导出不存在的记录返回 404")
+        r, status = api("GET", "/api/checkup/nonexistent-id/export")
+        assert_equal(status, 404, "导出不存在记录返回 404")
 
-        r_imp, s_imp = api("POST", f"/api/sandbox/{sandbox_id_1}/import")
-        assert_equal(s_imp, 200, "正式导入返回 200")
-        assert_true(r_imp.get("ok"), "正式导入 ok=true")
-        imp_data = r_imp["data"]
-        assert_equal(imp_data["counts"]["books"], 2, "导入 counts.books=2")
-        assert_true("batch_id" in imp_data, "返回 batch_id")
-        assert_true("report" in imp_data, "返回 report")
-        print(f"  [INFO] 沙箱内部批次ID: {imp_data['batch_id']}")
+        section("测试13: 作废不存在的记录返回 404")
+        r, status = api("POST", "/api/checkup/nonexistent-id/void")
+        assert_equal(status, 404, "作废不存在记录返回 404")
 
-        assert_equal(get_file_hash("books.json"), books_before_imp_hash, "沙箱导入不污染正式 books.json")
-        assert_equal(get_file_hash("logs.json"), logs_before_imp_hash, "沙箱导入不污染正式 logs.json")
-        assert_equal(get_file_hash("batches.json"), batches_before_imp_hash, "沙箱导入不污染正式 batches.json")
-        assert_equal(get_file_hash("reservations.json"), reservations_before_hash, "沙箱导入不污染正式 reservations.json")
-        assert_equal(get_file_hash("blacklist.json"), blacklist_before_hash, "沙箱导入不污染正式 blacklist.json")
+        section("测试14: 体检列表按时间倒序")
+        r_list, status = api("GET", "/api/checkup")
+        assert_equal(status, 200, "列表返回 200")
+        assert_true(len(r_list["data"]) >= 4, "列表至少有 4 条记录")
+        timestamps = [rec["created_at"] for rec in r_list["data"]]
+        assert_true(timestamps == sorted(timestamps, reverse=True), "按时间倒序排列")
 
-        prod_books_after_imp = api("GET", "/api/books")[0]["data"]
-        assert_equal(len(prod_books_after_imp), 0, "沙箱导入后正式 books 仍为空")
-        prod_batches_after = api("GET", "/api/batches")[0]["data"]
-        assert_equal(len(prod_batches_after), 0, "沙箱导入后正式 batches 仍为空")
+        section("测试15: 体检日志和结论单独落盘，不混入正式数据")
+        prod_logs_before = api("GET", "/api/logs?limit=10000")[0]["data"]
+        prod_log_ids = {l["log_id"] for l in prod_logs_before}
 
-        r_detail4, _ = api("GET", f"/api/sandbox/{sandbox_id_1}")
-        assert_equal(r_detail4["data"]["status"], "imported", "导入后沙箱状态为 imported")
-        assert_equal(r_detail4["data"]["data_counts"]["books"], 2, "沙箱内 books 数量=2")
-        assert_equal(r_detail4["data"]["data_counts"]["reservations"], 2, "沙箱内 reservations 数量=2")
-        assert_equal(r_detail4["data"]["data_counts"]["blacklist"], 1, "沙箱内 blacklist 数量=1")
-        assert_equal(r_detail4["data"]["data_counts"]["batches"], 1, "沙箱内 batches 数量=1")
-        dr = r_detail4["data"]["drill_results"]
-        assert_equal(dr["final_conclusion"], "imported_success", "final_conclusion=imported_success")
-        assert_true(dr["import_report"] is not None, "import_report 已落盘")
-        assert_equal(dr["imported_counts"]["books"], 2, "imported_counts.books=2")
+        new_snapshot = create_valid_snapshot("ISOLATE")
+        r, _ = api("POST", "/api/checkup", {"snapshot": new_snapshot, "operator": "isolate-tester"})
 
-        section("测试9: 沙箱回滚 API")
-        r_rb, s_rb = api("POST", f"/api/sandbox/{sandbox_id_1}/rollback")
-        assert_equal(s_rb, 200, "回滚返回 200")
-        assert_true(r_rb.get("ok"), "回滚 ok=true")
-        assert_equal(r_rb.get("already_rolled_back"), False, "首次回滚 already_rolled_back=false")
-        assert_true(r_rb.get("rollback_count", 0) > 0, "rollback_count > 0")
+        prod_logs_after = api("GET", "/api/logs?limit=10000")[0]["data"]
+        prod_log_ids_after = {l["log_id"] for l in prod_logs_after}
+        new_prod_log_ids = prod_log_ids_after - prod_log_ids
+        checkup_log_count = sum(1 for lid in new_prod_log_ids
+                                if any(l["log_id"] == lid and "checkup" in l.get("action", "")
+                                       for l in prod_logs_after))
+        assert_equal(checkup_log_count, 0, "体检日志不出现在正式操作日志中")
 
-        prod_books_after_rb = api("GET", "/api/books")[0]["data"]
-        assert_equal(len(prod_books_after_rb), 0, "回滚后正式 books 仍为空")
+        checkup_logs_file = os.path.join(CHECKUP_DIR, "logs.json")
+        assert_true(os.path.exists(checkup_logs_file), "checkup/logs.json 文件存在")
+        with open(checkup_logs_file, "r", encoding="utf-8") as f:
+            checkup_logs = json.load(f)
+        assert_true(len(checkup_logs) > 0, "体检日志文件非空")
 
-        r_detail5, _ = api("GET", f"/api/sandbox/{sandbox_id_1}")
-        assert_equal(r_detail5["data"]["status"], "rolled_back", "回滚后沙箱状态为 rolled_back")
-        assert_equal(r_detail5["data"]["data_counts"]["books"], 0, "回滚后沙箱 books=0")
-        assert_equal(r_detail5["data"]["data_counts"]["reservations"], 0, "回滚后沙箱 reservations=0")
-        assert_equal(r_detail5["data"]["data_counts"]["blacklist"], 0, "回滚后沙箱 blacklist=0")
-        dr5 = r_detail5["data"]["drill_results"]
-        assert_equal(dr5["final_conclusion"], "rolled_back_success", "final_conclusion=rolled_back_success")
-        assert_true(dr5["rollback_result"] is not None, "rollback_result 已落盘")
+        checkup_conclusions_file = os.path.join(CHECKUP_DIR, "conclusions.json")
+        assert_true(os.path.exists(checkup_conclusions_file), "checkup/conclusions.json 文件存在")
+        with open(checkup_conclusions_file, "r", encoding="utf-8") as f:
+            checkup_conclusions = json.load(f)
+        assert_true(len(checkup_conclusions) > 0, "体检结论文件非空")
 
-        section("测试10: 沙箱回滚幂等性")
-        r_rb2, s_rb2 = api("POST", f"/api/sandbox/{sandbox_id_1}/rollback")
-        assert_equal(s_rb2, 200, "第二次回滚也返回 200")
-        assert_true(r_rb2.get("ok"), "第二次回滚 ok=true")
-        assert_equal(r_rb2.get("already_rolled_back"), True, "第二次回滚 already_rolled_back=true")
-        assert_equal(r_rb2.get("rollback_count"), 0, "第二次回滚 rollback_count=0")
+        section("测试16: 失败体检不污染正式数据")
+        data_before = {}
+        for fname in ["books", "reservations", "blacklist", "logs"]:
+            data_before[fname] = get_data_file_hash(f"{fname}.json")
 
-        section("测试11: 沙箱重启验证 API")
-        r_rv, s_rv = api("POST", f"/api/sandbox/{sandbox_id_1}/restart-verify")
-        assert_equal(s_rv, 200, "重启验证返回 200")
-        assert_true(r_rv.get("ok"), "重启验证 ok=true")
-        rv = r_rv["data"]
-        assert_equal(rv["status"], "rolled_back", "验证状态为 rolled_back")
-        assert_true("data_counts" in rv, "包含 data_counts")
-        assert_true("verified_at" in rv, "包含 verified_at")
-        assert_true("config_stale" in rv, "包含 config_stale")
+        bad_snap = {
+            "version": "1.0",
+            "type": "not_snapshot",
+        }
+        r_bad, _ = api("POST", "/api/checkup", {"snapshot": bad_snap})
+        assert_equal(r_bad["data"]["status"], "failed", "错误快照体检失败")
 
-        r_detail6, _ = api("GET", f"/api/sandbox/{sandbox_id_1}")
-        assert_true(r_detail6["data"]["drill_results"]["restart_verification"] is not None, "重启验证结果已落盘")
+        for fname, old_hash in data_before.items():
+            assert_equal(get_data_file_hash(f"{fname}.json"), old_hash,
+                         f"体检失败后 {fname}.json 未被修改")
 
-        section("测试12: 沙箱导出演练结果 API")
-        r_exp, s_exp = api("GET", f"/api/sandbox/{sandbox_id_1}/export")
-        assert_equal(s_exp, 200, "导出返回 200")
-        assert_true(r_exp.get("ok"), "导出 ok=true")
-        exp = r_exp["data"]
-        assert_equal(exp["sandbox_id"], sandbox_id_1, "导出 sandbox_id 正确")
-        assert_equal(exp["status"], "rolled_back", "导出状态正确")
-        assert_true("snapshot_counts" in exp, "包含 snapshot_counts")
-        assert_true("data_counts" in exp, "包含 data_counts")
-        assert_true("drill_results" in exp, "包含完整 drill_results")
-        assert_equal(exp["drill_results"]["final_conclusion"], "rolled_back_success", "导出结论正确")
+        section("测试17: 服务重启后体检记录可继续查询")
+        all_records = api("GET", "/api/checkup")[0]["data"]
+        first_record_id = all_records[0]["record_id"]
 
-        section("测试13: 服务重启后沙箱记录完整保留")
         print("  [INFO] 重启服务中...")
         stop_server(proc)
         proc = start_server()
 
-        r_list_after, _ = api("GET", "/api/sandbox")
-        assert_equal(len(r_list_after["data"]), 1, "重启后沙箱列表仍有 1 条记录")
-        assert_equal(r_list_after["data"][0]["sandbox_id"], sandbox_id_1, "重启后 sandbox_id 不变")
-        assert_equal(r_list_after["data"][0]["status"], "rolled_back", "重启后状态仍为 rolled_back")
+        r_after, status_after = api("GET", f"/api/checkup/{first_record_id}")
+        assert_equal(status_after, 200, "重启后查询返回 200")
+        assert_equal(r_after["data"]["record_id"], first_record_id, "重启后 record_id 匹配")
+        assert_true("conclusion" in r_after["data"], "重启后 conclusion 仍在")
 
-        r_detail_after, _ = api("GET", f"/api/sandbox/{sandbox_id_1}")
-        assert_equal(r_detail_after["data"]["drill_results"]["final_conclusion"], "rolled_back_success",
-                     "重启后 drill_results 完整保留")
-        assert_true(r_detail_after["data"]["drill_results"]["import_report"] is not None,
-                    "重启后 import_report 仍在")
-        assert_true(r_detail_after["data"]["drill_results"]["rollback_result"] is not None,
-                    "重启后 rollback_result 仍在")
+        r_list_after, _ = api("GET", "/api/checkup")
+        assert_true(len(r_list_after["data"]) >= 4, "重启后列表至少有 4 条记录")
 
-        section("测试14: 重启后仍可继续查询和操作沙箱")
-        r_rv_after, _ = api("POST", f"/api/sandbox/{sandbox_id_1}/restart-verify")
-        assert_true(r_rv_after.get("ok"), "重启后重启验证 API 可用")
-        assert_equal(r_rv_after["data"]["status"], "rolled_back", "重启后验证状态正确")
+        r_export_after, _ = api("GET", f"/api/checkup/{first_record_id}/export")
+        assert_equal(r_export_after["data"]["record_id"], first_record_id, "重启后导出 record_id 匹配")
 
-        r_exp_after, _ = api("GET", f"/api/sandbox/{sandbox_id_1}/export")
-        assert_true(r_exp_after.get("ok"), "重启后导出 API 可用")
+        section("测试18: 配置切换后旧记录自动失效")
+        clear_data()
+        stop_server(proc)
+        proc = start_server()
 
-        section("测试15: 沙箱销毁 API")
-        books_before_destroy = get_file_hash("books.json")
-        logs_before_destroy = get_file_hash("logs.json")
-
-        r_del, s_del = api("DELETE", f"/api/sandbox/{sandbox_id_1}")
-        assert_equal(s_del, 200, "销毁返回 200")
-        assert_true(r_del.get("ok"), "销毁 ok=true")
-
-        r_get, s_get = api("GET", f"/api/sandbox/{sandbox_id_1}")
-        assert_equal(s_get, 404, "销毁后查询返回 404")
-
-        r_list_after_del, _ = api("GET", "/api/sandbox")
-        assert_equal(len(r_list_after_del["data"]), 0, "销毁后列表为空")
-
-        assert_equal(get_file_hash("books.json"), books_before_destroy, "销毁不影响正式 books.json")
-        assert_equal(get_file_hash("logs.json"), logs_before_destroy, "销毁不影响正式 logs.json")
-
-        sandbox_path = os.path.join(SANDBOX_DIR, sandbox_id_1)
-        assert_true(not os.path.isdir(sandbox_path), "销毁后沙箱目录已删除")
-
-        section("测试16: 正式配置切换后旧沙箱不可误用")
-        snapshot_b = create_test_snapshot("CFG-STALE")
-        r_sb, s_sb = api("POST", "/api/sandbox", {"snapshot": snapshot_b, "name": "配置过期测试"})
-        assert_equal(s_sb, 201, "创建沙箱B成功")
-        sandbox_id_b = r_sb["data"]["sandbox_id"]
-        assert_equal(r_sb["data"]["config_stale"], False, "初始 config_stale=false")
+        snap_before = create_valid_snapshot("BEFORE")
+        r1, _ = api("POST", "/api/checkup", {"snapshot": snap_before, "operator": "cfg-tester"})
+        before_id = r1["data"]["record_id"]
+        assert_equal(r1["data"]["status"], "passed", "切换前体检通过")
 
         api("POST", "/api/books", {
-            "book_id": "PROD-BOOK-001",
-            "title": "正式环境新增的书",
-            "total_copies": 5,
+            "book_id": "NEW-BOOK",
+            "title": "配置切换新书",
+            "total_copies": 10,
             "borrow_days": 30,
             "retain_hours": 24,
         })
 
-        r_detail_b, _ = api("GET", f"/api/sandbox/{sandbox_id_b}")
-        assert_equal(r_detail_b["data"]["config_stale"], True, "正式配置变更后 config_stale=true")
-        assert_true("config_stale_detail" in r_detail_b["data"], "包含 config_stale_detail")
-
-        r_pre_b, s_pre_b = api("POST", f"/api/sandbox/{sandbox_id_b}/precheck")
-        assert_equal(s_pre_b, 410, "配置过期后预检返回 410")
-        assert_true(r_pre_b.get("config_stale"), "响应标记 config_stale=true")
-        assert_true("配置已变更" in str(r_pre_b.get("error", "")), "错误信息提示配置变更")
-
-        r_dry_b, s_dry_b = api("POST", f"/api/sandbox/{sandbox_id_b}/dryrun")
-        assert_equal(s_dry_b, 410, "配置过期后 Dry-Run 返回 410")
-        assert_true(r_dry_b.get("config_stale"), "响应标记 config_stale=true")
-
-        r_imp_b, s_imp_b = api("POST", f"/api/sandbox/{sandbox_id_b}/import")
-        assert_equal(s_imp_b, 410, "配置过期后导入返回 410")
-        assert_true(r_imp_b.get("config_stale"), "响应标记 config_stale=true")
-
-        api("DELETE", f"/api/sandbox/{sandbox_id_b}")
-        api("DELETE", "/api/books/PROD-BOOK-001")
-
-        section("测试17: 带冲突快照的沙箱预检和 dry-run")
-        conflict_snapshot = create_test_snapshot("CONFLICT-SB")
-        conflict_snapshot["books"].append({
-            "book_id": "CONFLICT-SB-001",
-            "title": "重复书",
-            "total_copies": 3,
-            "borrow_days": 14,
-            "retain_hours": 12,
-        })
-        r_sc, s_sc = api("POST", "/api/sandbox", {"snapshot": conflict_snapshot, "name": "冲突测试"})
-        assert_equal(s_sc, 201, "冲突快照创建沙箱成功")
-        sandbox_id_conflict = r_sc["data"]["sandbox_id"]
-
-        r_prec, s_prec = api("POST", f"/api/sandbox/{sandbox_id_conflict}/precheck")
-        assert_equal(s_prec, 200, "冲突快照预检返回 200")
-        assert_equal(r_prec["data"]["can_import"], False, "预检 can_import=false")
-        assert_equal(r_prec["data"]["summary"]["status"], "has_conflicts", "状态 has_conflicts")
-        assert_equal(len(r_prec["data"]["details"]["books"]["conflicts"]), 1, "检测到 1 个 books 冲突")
-        assert_equal(r_prec["data"]["details"]["books"]["conflicts"][0]["type"],
-                     "duplicate_book_id_in_snapshot", "冲突类型正确")
-
-        r_dryc, s_dryc = api("POST", f"/api/sandbox/{sandbox_id_conflict}/dryrun")
-        assert_equal(s_dryc, 409, "冲突快照 Dry-Run 返回 409")
-        assert_true("conflicts" in r_dryc, "响应包含 conflicts")
-        assert_true(len(r_dryc["conflicts"]) > 0, "冲突列表非空")
-
-        r_impc, s_impc = api("POST", f"/api/sandbox/{sandbox_id_conflict}/import")
-        assert_equal(s_impc, 409, "冲突快照导入返回 409")
-        assert_true("conflicts" in r_impc, "响应包含 conflicts")
-
-        r_detailc, _ = api("GET", f"/api/sandbox/{sandbox_id_conflict}")
-        assert_equal(r_detailc["data"]["status"], "failed", "冲突导入后状态为 failed")
-        assert_equal(r_detailc["data"]["drill_results"]["final_conclusion"], "has_conflicts",
-                     "final_conclusion=has_conflicts")
-        assert_true(len(r_detailc["data"]["drill_results"]["conflicts"]) > 0, "conflicts 已落盘")
-
-        api("DELETE", f"/api/sandbox/{sandbox_id_conflict}")
-
-        section("测试18: 沙箱数据与正式数据完全隔离 - 多沙箱场景")
-        snap_x = create_test_snapshot("SB-X")
-        snap_y = create_test_snapshot("SB-Y", "R-SBY", "BL-SBY")
-        r_x, _ = api("POST", "/api/sandbox", {"snapshot": snap_x, "name": "沙箱X"})
-        sandbox_id_x = r_x["data"]["sandbox_id"]
-        r_y, _ = api("POST", "/api/sandbox", {"snapshot": snap_y, "name": "沙箱Y"})
-        sandbox_id_y = r_y["data"]["sandbox_id"]
-
-        api("POST", f"/api/sandbox/{sandbox_id_x}/import")
-        api("POST", f"/api/sandbox/{sandbox_id_y}/import")
-
-        prod_books_multi = api("GET", "/api/books")[0]["data"]
-        assert_equal(len(prod_books_multi), 0, "多沙箱导入后正式 books 仍为空")
-        prod_logs_multi = api("GET", "/api/logs?limit=1000")[0]["data"]
-        sb_log_count = sum(1 for l in prod_logs_multi
-                          if l.get("book_id") and (l["book_id"].startswith("SB-X") or l["book_id"].startswith("SB-Y")))
-        assert_equal(sb_log_count, 0, "多沙箱日志不串到正式 logs")
-
-        r_dx, _ = api("GET", f"/api/sandbox/{sandbox_id_x}")
-        assert_equal(r_dx["data"]["data_counts"]["books"], 2, "沙箱X books=2")
-        book_ids_x = set()
-        for fname in ["books", "reservations", "blacklist"]:
-            p = os.path.join(SANDBOX_DIR, sandbox_id_x, f"{fname}.json")
-            if os.path.exists(p):
-                with open(p, "r", encoding="utf-8") as f:
-                    items = json.load(f)
-                    for it in items:
-                        if "book_id" in it:
-                            book_ids_x.add(it["book_id"])
-        assert_true("SB-X-001" in book_ids_x, "沙箱X目录只有X的数据")
-        assert_true("SB-Y-001" not in book_ids_x, "沙箱X目录没有Y的数据")
-
-        api("DELETE", f"/api/sandbox/{sandbox_id_x}")
-        r_dy_after, _ = api("GET", f"/api/sandbox/{sandbox_id_y}")
-        assert_equal(r_dy_after["data"]["status"], "imported", "销毁沙箱X不影响沙箱Y")
-        assert_equal(r_dy_after["data"]["data_counts"]["books"], 2, "沙箱Y数据仍完整")
-
-        api("DELETE", f"/api/sandbox/{sandbox_id_y}")
-
-        section("测试19: 非法快照格式被拦截")
-        bad_snapshot = {"version": "1.0", "type": "wrong_type"}
-        r_bad, s_bad = api("POST", "/api/sandbox", {"snapshot": bad_snapshot})
-        assert_equal(s_bad, 400, "非法快照格式返回 400")
-        assert_true(not r_bad.get("ok"), "响应 ok=false")
-
-        bad_body = {"name": "缺少snapshot字段的请求"}
-        r_bad2, s_bad2 = api("POST", "/api/sandbox", bad_body)
-        assert_equal(s_bad2, 400, "缺少 snapshot 字段返回 400")
-
-        section("测试20: 不存在的沙箱返回 404")
-        r_ng, s_ng = api("GET", "/api/sandbox/nonexistent-id")
-        assert_equal(s_ng, 404, "不存在的沙箱详情返回 404")
-        r_ng2, s_ng2 = api("POST", "/api/sandbox/nonexistent-id/precheck")
-        assert_equal(s_ng2, 404, "不存在的沙箱预检返回 404")
-        r_ng3, s_ng3 = api("DELETE", "/api/sandbox/nonexistent-id")
-        assert_equal(s_ng3, 404, "不存在的沙箱销毁返回 404")
-
-        section("测试21: 沙箱完整生命周期 - 预检→dry-run→导入→验证→回滚→重启→导出→销毁")
-        snap_full = create_test_snapshot("FULL-LC", "R-FULL", "BL-FULL")
-        r_full, _ = api("POST", "/api/sandbox", {"snapshot": snap_full, "name": "完整生命周期测试"})
-        sb_full_id = r_full["data"]["sandbox_id"]
-
-        api("POST", f"/api/sandbox/{sb_full_id}/precheck")
-        api("POST", f"/api/sandbox/{sb_full_id}/dryrun")
-        r_imp_full, _ = api("POST", f"/api/sandbox/{sb_full_id}/import")
-        assert_equal(r_imp_full.get("ok"), True, "正式导入成功")
-
-        api("POST", f"/api/sandbox/{sb_full_id}/restart-verify")
-
-        print("  [INFO] 重启服务中...")
+        print("  [INFO] 重启服务（触发配置变更检测）...")
         stop_server(proc)
         proc = start_server()
 
-        r_detail_full, _ = api("GET", f"/api/sandbox/{sb_full_id}")
-        assert_equal(r_detail_full["data"]["status"], "imported", "重启后状态仍为 imported")
+        r_check, _ = api("GET", f"/api/checkup/{before_id}")
+        assert_equal(r_check["data"]["status"], "expired", "配置切换后旧记录状态变为 expired")
+        assert_true(r_check["data"].get("config_stale"), "config_stale=true")
 
-        api("POST", f"/api/sandbox/{sb_full_id}/restart-verify")
-        api("POST", f"/api/sandbox/{sb_full_id}/rollback")
-        r_exp_full, _ = api("GET", f"/api/sandbox/{sb_full_id}/export")
-        assert_equal(r_exp_full["data"]["drill_results"]["final_conclusion"], "rolled_back_success",
-                     "完整生命周期最终结论正确")
-        assert_true(r_exp_full["data"]["drill_results"]["precheck_report"] is not None, "precheck_report 存在")
-        assert_true(r_exp_full["data"]["drill_results"]["dryrun_report"] is not None, "dryrun_report 存在")
-        assert_true(r_exp_full["data"]["drill_results"]["import_report"] is not None, "import_report 存在")
-        assert_true(r_exp_full["data"]["drill_results"]["rollback_result"] is not None, "rollback_result 存在")
-        assert_true(r_exp_full["data"]["drill_results"]["restart_verification"] is not None, "restart_verification 存在")
+        r_export_stale, _ = api("GET", f"/api/checkup/{before_id}/export")
+        assert_true("stale_warning" in r_export_stale["data"], "导出报告包含过期警告")
 
-        api("DELETE", f"/api/sandbox/{sb_full_id}")
+        section("测试19: 作废后同一快照可重新提交")
+        snap_resubmit = create_valid_snapshot("RESUB")
+        r_resub1, _ = api("POST", "/api/checkup", {"snapshot": snap_resubmit})
+        resub_id = r_resub1["data"]["record_id"]
 
-        section("测试22: 沙箱演练结果独立落盘，不串正式环境")
-        snap_sep = create_test_snapshot("SEPARATE")
-        r_sep, _ = api("POST", "/api/sandbox", {"snapshot": snap_sep, "name": "独立落盘测试"})
-        sb_sep_id = r_sep["data"]["sandbox_id"]
-        api("POST", f"/api/sandbox/{sb_sep_id}/import")
+        r_resub_void, _ = api("POST", f"/api/checkup/{resub_id}/void", {"operator": "admin"})
+        assert_equal(r_resub_void["data"]["status"], "voided", "作废成功")
 
-        drill_path = os.path.join(SANDBOX_DIR, sb_sep_id, "drill_results.json")
-        assert_true(os.path.exists(drill_path), "drill_results.json 存在于沙箱目录")
-        with open(drill_path, "r", encoding="utf-8") as f:
-            drill_file = json.load(f)
-        assert_equal(drill_file["final_conclusion"], "imported_success", "文件中 final_conclusion 正确")
-        assert_true(drill_file["imported_counts"] is not None, "文件中 imported_counts 存在")
-        assert_true(drill_file["conflicts"] is not None, "文件中 conflicts 存在")
+        r_resub2, status2 = api("POST", "/api/checkup", {"snapshot": snap_resubmit})
+        assert_equal(status2, 201, "作废后可重新提交")
+        assert_true(r_resub2["data"]["record_id"] != resub_id, "新记录ID不同于旧记录")
 
-        prod_batches_file = os.path.join(DATA_DIR, "batches.json")
-        if os.path.exists(prod_batches_file):
-            with open(prod_batches_file, "r", encoding="utf-8") as f:
-                prod_batches_data = json.load(f)
-            sb_batch_count = sum(1 for b in prod_batches_data if b.get("type") == "sandbox_snapshot_import")
-            assert_equal(sb_batch_count, 0, "正式 batches.json 不含沙箱批次")
+        section("测试20: 权限区分 - 只读查看 vs 作废操作")
+        snap_perm = create_valid_snapshot("PERM")
+        r_perm, _ = api("POST", "/api/checkup", {"snapshot": snap_perm, "operator": "creator"})
+        perm_id = r_perm["data"]["record_id"]
 
-        api("DELETE", f"/api/sandbox/{sb_sep_id}")
+        r_view, status_view = api("GET", f"/api/checkup/{perm_id}")
+        assert_equal(status_view, 200, "只读查看返回 200")
+        assert_equal(r_view["data"]["status"], "passed", "查看不影响状态")
 
-        section("测试23: 沙箱 limit 参数")
-        for i in range(5):
-            snap_i = create_test_snapshot(f"LIMIT-{i}")
-            api("POST", "/api/sandbox", {"snapshot": snap_i, "name": f"limit测试{i}"})
+        r_export_perm, status_export = api("GET", f"/api/checkup/{perm_id}/export")
+        assert_equal(status_export, 200, "导出报告返回 200")
+        assert_equal(r_export_perm["data"]["status"], "passed", "导出报告不影响状态")
 
-        r_lim, _ = api("GET", "/api/sandbox?limit=3")
-        assert_equal(len(r_lim["data"]), 3, "limit=3 返回 3 条")
+        r_void_perm, status_void = api("POST", f"/api/checkup/{perm_id}/void", {"operator": "voider"})
+        assert_equal(status_void, 200, "作废操作返回 200")
+        assert_equal(r_void_perm["data"]["status"], "voided", "作废改变状态")
+        assert_equal(r_void_perm["data"]["voided_by"], "voider", "作废记录操作者")
 
-        for sb in r_lim["data"]:
-            api("DELETE", f"/api/sandbox/{sb['sandbox_id']}")
-        r_all, _ = api("GET", "/api/sandbox")
-        for sb in r_all["data"]:
-            api("DELETE", f"/api/sandbox/{sb['sandbox_id']}")
+        section("测试21: 并发占用 - 同一快照快速提交两次")
+        snap_concurrent = create_valid_snapshot("CONC")
+        r_conc1, _ = api("POST", "/api/checkup", {"snapshot": snap_concurrent})
+        assert_true(r_conc1.get("ok"), "第一次提交成功")
 
-        section("测试24: 已导入沙箱不能重复导入")
-        snap_no_dup = create_test_snapshot("NO-DUP-IMP")
-        r_nd, _ = api("POST", "/api/sandbox", {"snapshot": snap_no_dup, "name": "不重复导入测试"})
-        sb_nd_id = r_nd["data"]["sandbox_id"]
-        api("POST", f"/api/sandbox/{sb_nd_id}/import")
+        r_conc2, status_conc2 = api("POST", "/api/checkup", {"snapshot": snap_concurrent})
+        assert_equal(status_conc2, 409, "并发提交同一快照返回 409")
 
-        r_nd2, s_nd2 = api("POST", f"/api/sandbox/{sb_nd_id}/import")
-        assert_equal(s_nd2, 409, "重复导入返回 409")
-        assert_true("已执行过正式导入" in str(r_nd2.get("error", "")), "错误信息说明已导入")
+        section("测试22: 体检记录 limit 参数")
+        r_limit, _ = api("GET", "/api/checkup?limit=2")
+        assert_true(len(r_limit["data"]) <= 2, "limit=2 时最多返回 2 条")
 
-        api("DELETE", f"/api/sandbox/{sb_nd_id}")
+        section("测试23: 缺少 snapshot 字段返回 400")
+        r_no_snap, status_no = api("POST", "/api/checkup", {"operator": "tester"})
+        assert_equal(status_no, 400, "缺少 snapshot 返回 400")
+
+        section("测试24: 保留时间=0 的敏感配置告警")
+        retain_zero_snapshot = create_valid_snapshot("RH0")
+        retain_zero_snapshot["books"][0]["retain_hours"] = 0
+        r_rh0, _ = api("POST", "/api/checkup", {"snapshot": retain_zero_snapshot})
+        detail_rh0, _ = api("GET", f"/api/checkup/{r_rh0['data']['record_id']}")
+        sensitive_warns = detail_rh0["data"]["conclusion"]["sensitive_warnings"]
+        has_retain_zero = any(w["code"] == "sensitive_retain_hours" for w in sensitive_warns)
+        assert_true(has_retain_zero, "retain_hours=0 触发 sensitive_retain_hours 告警")
+
+        section("测试25: 完整链路 - 创建→查询→导出→作废→重新提交")
+        snap_e2e = create_valid_snapshot("E2E")
+        r_e2e_create, _ = api("POST", "/api/checkup", {"snapshot": snap_e2e, "operator": "e2e-user", "name": "端到端测试"})
+        e2e_id = r_e2e_create["data"]["record_id"]
+        assert_equal(r_e2e_create["data"]["status"], "passed", "创建状态 passed")
+
+        r_e2e_get, _ = api("GET", f"/api/checkup/{e2e_id}")
+        assert_equal(r_e2e_get["data"]["status"], "passed", "查询状态 passed")
+        assert_true("conclusion" in r_e2e_get["data"], "查询包含 conclusion")
+
+        r_e2e_export, _ = api("GET", f"/api/checkup/{e2e_id}/export")
+        assert_true("report_id" in r_e2e_export["data"], "导出包含 report_id")
+        assert_equal(r_e2e_export["data"]["name"], "端到端测试", "导出名称正确")
+
+        r_e2e_void, _ = api("POST", f"/api/checkup/{e2e_id}/void", {"operator": "e2e-admin"})
+        assert_equal(r_e2e_void["data"]["status"], "voided", "作废成功")
+
+        r_e2e_resub, _ = api("POST", "/api/checkup", {"snapshot": snap_e2e})
+        assert_equal(r_e2e_resub["data"]["status"], "passed", "重新提交成功")
 
         print("\n" + "="*60)
         print("  所有测试通过 ✓")
