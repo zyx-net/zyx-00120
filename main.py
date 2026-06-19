@@ -6,6 +6,7 @@ import service
 import sandbox_service
 import checkup_service
 import remind_service
+import freeze_service
 
 app = Flask(__name__)
 
@@ -535,13 +536,164 @@ def api_revoke_remind(order_id):
     return jsonify({"ok": True, "data": order}), 200
 
 
+@app.route("/api/freeze/config", methods=["GET"])
+def api_freeze_config_get():
+    role = request.headers.get("X-Role", "viewer")
+    config = freeze_service.get_feature_config(role=role)
+    return jsonify({"ok": True, "data": config}), 200
+
+
+@app.route("/api/freeze/config", methods=["PUT"])
+def api_freeze_config_put():
+    d = request.get_json(force=True) if request.is_json else {}
+    enabled = d.get("enabled")
+    if enabled is None:
+        return jsonify({"ok": False, "error": "缺少 enabled 字段"}), 400
+    if not isinstance(enabled, bool):
+        return jsonify({"ok": False, "error": "enabled 必须是布尔值"}), 400
+    operator = request.headers.get("X-Operator") or d.get("operator")
+    role = request.headers.get("X-Role", "viewer")
+    result, err = freeze_service.update_feature_config(enabled, operator=operator, role=role)
+    if err:
+        return jsonify({"ok": False, "error": err}), 403
+    return jsonify({"ok": True, "data": result}), 200
+
+
+@app.route("/api/freeze", methods=["POST"])
+def api_freeze_create():
+    d = request.get_json(force=True)
+    required = ["book_id", "reason"]
+    for k in required:
+        if k not in d:
+            return jsonify({"ok": False, "error": f"缺少必填字段: {k}"}), 400
+    operator = request.headers.get("X-Operator") or d.get("operator")
+    role = request.headers.get("X-Role", "viewer")
+    order, idempotent_hit, err = freeze_service.create_freeze(
+        d["book_id"], d["reason"],
+        operator=operator, role=role,
+        remark=d.get("remark"),
+        effective_at=d.get("effective_at"),
+        idempotency_key=d.get("idempotency_key"),
+    )
+    if err:
+        if "已存在活跃冻结单" in str(err):
+            return jsonify({"ok": False, "error": err, "idempotent_hit": False}), 409
+        if "manager 权限" in str(err):
+            return jsonify({"ok": False, "error": err}), 403
+        return jsonify({"ok": False, "error": err}), 400
+    return jsonify({"ok": True, "data": order, "idempotent_hit": idempotent_hit}), 201
+
+
+@app.route("/api/freeze", methods=["GET"])
+def api_freeze_list():
+    book_id = request.args.get("book_id")
+    reason = request.args.get("reason")
+    status = request.args.get("status")
+    operator = request.args.get("operator")
+    limit = request.args.get("limit", 100, type=int)
+    orders = freeze_service.list_freezes(
+        book_id=book_id, reason=reason, status=status,
+        operator=operator, limit=limit,
+    )
+    return jsonify({"ok": True, "data": orders}), 200
+
+
+@app.route("/api/freeze/<freeze_id>", methods=["GET"])
+def api_freeze_get(freeze_id):
+    role = request.headers.get("X-Role", "viewer")
+    order, err = freeze_service.get_freeze(freeze_id, role=role)
+    if err:
+        return jsonify({"ok": False, "error": err}), 404
+    return jsonify({"ok": True, "data": order}), 200
+
+
+@app.route("/api/freeze/<freeze_id>/snapshot/<snapshot_type>", methods=["GET"])
+def api_freeze_snapshot(freeze_id, snapshot_type):
+    role = request.headers.get("X-Role", "viewer")
+    if snapshot_type not in ("before", "after_freeze", "after_restore"):
+        return jsonify({"ok": False, "error": "snapshot_type 必须是 before, after_freeze, after_restore 之一"}), 400
+    snapshot, err = freeze_service.get_freeze_snapshot(freeze_id, snapshot_type, role=role)
+    if err:
+        return jsonify({"ok": False, "error": err}), 404
+    return jsonify({"ok": True, "data": snapshot}), 200
+
+
+@app.route("/api/freeze/<freeze_id>/export", methods=["GET"])
+def api_freeze_export(freeze_id):
+    role = request.headers.get("X-Role", "viewer")
+    report, err = freeze_service.export_freeze_report(freeze_id, role=role)
+    if err:
+        return jsonify({"ok": False, "error": err}), 404
+    return jsonify({"ok": True, "data": report}), 200
+
+
+@app.route("/api/freeze/<freeze_id>/revoke", methods=["POST"])
+def api_freeze_revoke(freeze_id):
+    d = request.get_json(force=True) if request.is_json else {}
+    operator = request.headers.get("X-Operator") or d.get("operator")
+    role = request.headers.get("X-Role", "viewer")
+    order, err = freeze_service.revoke_freeze(freeze_id, operator=operator, role=role)
+    if err:
+        if "仅 pending" in str(err):
+            return jsonify({"ok": False, "error": err}), 409
+        if "manager 权限" in str(err):
+            return jsonify({"ok": False, "error": err}), 403
+        return jsonify({"ok": False, "error": err}), 404
+    return jsonify({"ok": True, "data": order}), 200
+
+
+@app.route("/api/freeze/<freeze_id>/restore", methods=["POST"])
+def api_freeze_restore(freeze_id):
+    d = request.get_json(force=True) if request.is_json else {}
+    operator = request.headers.get("X-Operator") or d.get("operator")
+    role = request.headers.get("X-Role", "viewer")
+    order, err = freeze_service.restore_freeze(freeze_id, operator=operator, role=role)
+    if err:
+        if "仅 frozen" in str(err):
+            return jsonify({"ok": False, "error": err}), 409
+        if "manager 权限" in str(err):
+            return jsonify({"ok": False, "error": err}), 403
+        return jsonify({"ok": False, "error": err}), 404
+    return jsonify({"ok": True, "data": order}), 200
+
+
+@app.route("/api/freeze/batch-restore", methods=["POST"])
+def api_freeze_batch_restore():
+    d = request.get_json(force=True)
+    freeze_ids = d.get("freeze_ids")
+    if not freeze_ids or not isinstance(freeze_ids, list):
+        return jsonify({"ok": False, "error": "缺少 freeze_ids 列表"}), 400
+    operator = request.headers.get("X-Operator") or d.get("operator")
+    role = request.headers.get("X-Role", "viewer")
+    result, err = freeze_service.batch_restore(freeze_ids, operator=operator, role=role)
+    if err:
+        if "manager 权限" in str(err):
+            return jsonify({"ok": False, "error": err}), 403
+        return jsonify({"ok": False, "error": err}), 400
+    return jsonify({"ok": True, "data": result}), 200
+
+
+@app.route("/api/freeze/audit-logs", methods=["GET"])
+def api_freeze_audit_logs():
+    freeze_id = request.args.get("freeze_id")
+    operator = request.args.get("operator")
+    action = request.args.get("action")
+    limit = request.args.get("limit", 200, type=int)
+    logs = freeze_service.list_audit_logs(
+        freeze_id=freeze_id, operator=operator, action=action, limit=limit,
+    )
+    return jsonify({"ok": True, "data": logs}), 200
+
+
 def main():
     import store as _store
     import checkup_store as _checkup_store
     import remind_store as _remind_store
+    import freeze_store as _freeze_store
     print(f"[启动] 数据目录: {_store.DATA_DIR}")
     print(f"[启动] 体检目录: {_checkup_store.CHECKUP_BASE_DIR}")
     print(f"[启动] 催办目录: {_remind_store.REMIND_BASE_DIR}")
+    print(f"[启动] 冻结目录: {_freeze_store.FREEZE_BASE_DIR}")
     print("[启动] 检查并处理过期预约...")
     service.process_expired()
     print("[启动] 过期检查完成，启动定时过期扫描（每10秒）")
@@ -571,6 +723,16 @@ def main():
         print(f"[启动] 因配置变更失效了 {len(remind_stale_invalidated)} 条催办单")
         for r in remind_stale_invalidated:
             print(f"  - 催办 {r['order_id']}: {r['previous_status']} -> {r['new_status']}")
+    freeze_recovered = freeze_service.recover_on_startup()
+    if freeze_recovered:
+        print(f"[启动] 恢复了 {len(freeze_recovered)} 个异常中断的冻结单")
+        for r in freeze_recovered:
+            print(f"  - 冻结 {r['freeze_id']} ({r['book_id']}): {r['previous_status']} -> {r['new_status']}")
+    freeze_stale_invalidated = freeze_service.invalidate_stale_freezes()
+    if freeze_stale_invalidated:
+        print(f"[启动] 因配置变更失效了 {len(freeze_stale_invalidated)} 条未生效冻结单")
+        for r in freeze_stale_invalidated:
+            print(f"  - 冻结 {r['freeze_id']} ({r['book_id']}): {r['previous_status']} -> {r['new_status']}")
     app.run(host="127.0.0.1", port=5000, debug=False)
 
 

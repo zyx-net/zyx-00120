@@ -1,0 +1,163 @@
+{
+  "affected_readers_detail": [
+    {
+      "created_at": "2026-06-19T03:33:59.161016+00:00",
+      "position": null,
+      "reader_id": "R1001",
+      "reservation_id": "88ae2159-1a82-46f1-991b-3b56e60c448f",
+      "status": "available"
+    },
+    {
+      "created_at": "2026-06-19T03:33:59.166835+00:00",
+      "position": null,
+      "reader_id": "R1002",
+      "reservation_id": "37e1662f-16a1-429c-8f8a-d2db811aadb4",
+      "status": "available"
+    },
+    {
+      "created_at": "2026-06-19T03:33:59.182674+00:00",
+      "position": 1,
+      "reader_id": "R1003",
+      "reservation_id": "9050fc0e-c9b1-404d-b559-d8c94e4165d9",
+      "status": "waiting"
+    },
+    {
+      "created_at": "2026-06-19T03:33:59.198115+00:00",
+      "position": 2,
+      "reader_id": "R1004",
+      "reservation_id": "bbf04389-56a5-48ba-8fee-50ab160107d1",
+      "status": "waiting"
+    }
+  ],
+  "audit_logs": [
+    {
+      "action": "freeze_create",
+      "detail": "创建冻结单，book=FREEZE-TEST-001，reason=inventory_check，影响 4 名读者",
+      "freeze_id": "38f6e9bb-ee49-4434-85e9-70c8e9acab67",
+      "idempotency_key": "idem-001",
+      "log_id": "ae8d36b7-e719-4b82-923b-4a73dde7b0a7",
+      "operator": "librarian_A",
+      "success": true,
+      "timestamp": "2026-06-19T03:33:59.214801+00:00"
+    },
+    {
+      "action": "freeze_effective",
+      "detail": "冻结生效，共 4 条预约被冻结",
+      "freeze_id": "38f6e9bb-ee49-4434-85e9-70c8e9acab67",
+      "log_id": "5f4703b2-dd19-4eb5-adf6-76ef038a93df",
+      "operator": "librarian_A",
+      "success": true,
+      "timestamp": "2026-06-19T03:33:59.218635+00:00"
+    },
+    {
+      "action": "freeze_create_idempotent",
+      "detail": "幂等命中，返回已存在的冻结单，idempotency_key=idem-001",
+      "freeze_id": "38f6e9bb-ee49-4434-85e9-70c8e9acab67",
+      "log_id": "5ee7382a-687f-47ab-aada-455534ac5147",
+      "operator": "librarian_A",
+      "success": true,
+      "timestamp": "2026-06-19T03:33:59.223199+00:00"
+    }
+  ],
+  "book_id": "FREEZE-TEST-001",
+  "book_title": "冻结模块测试书目A",
+  "config_signature": "db44b39e7079185fa9cea89684e9e4d7fb4083f4a8f069175d0095ee9168722c",
+  "config_stale": false,
+  "created_at": "2026-06-19T03:33:59.213042+00:00",
+  "effective_at": "2026-06-19T03:33:59.213023+00:00",
+  "exported_at": "2026-06-19T03:33:59.237591+00:00",
+  "freeze_id": "38f6e9bb-ee49-4434-85e9-70c8e9acab67",
+  "freeze_reason": "inventory_check",
+  "freeze_reason_detail": "年终盘点，馆内下架盘点",
+  "frozen_at": "2026-06-19T03:33:59.216366+00:00",
+  "idempotency_key": "idem-001",
+  "impact_summary": {
+    "affected_reader_ids": [
+      "R1001",
+      "R1002",
+      "R1003",
+      "R1004"
+    ],
+    "after_freeze_queue": {
+      "available_count": 0,
+      "borrowed_count": 0,
+      "frozen_count": 4,
+      "total_count": 0,
+      "waiting_count": 0
+    },
+    "before_queue": {
+      "affected_reader_ids": [
+        "R1001",
+        "R1002",
+        "R1003",
+        "R1004"
+      ],
+      "available_count": 2,
+      "borrowed_count": 0,
+      "total_count": 4,
+      "waiting_count": 2
+    },
+    "frozen_reservation_count": 4,
+    "restore_result": null,
+    "restored_reservation_count": 0,
+    "total_affected_readers": 4
+  },
+  "invalidated_at": null,
+  "operator": "librarian_A",
+  "report_id": "de422688-0bd3-4a4a-b6d2-0e6efbbe5312",
+  "report_type": "freeze_report",
+  "report_version": "1.0",
+  "restored_at": null,
+  "revoked_at": null,
+  "role_at_create": "manager",
+  "snapshots": {
+    "after_freeze": {
+      "present": true,
+      "summary": {
+        "available_count": 0,
+        "borrowed_count": 0,
+        "frozen_count": 4,
+        "total_count": 0,
+        "waiting_count": 0
+      },
+      "time": "2026-06-19T03:33:59.217453+00:00"
+    },
+    "after_restore": {
+      "present": false,
+      "summary": null,
+      "time": null
+    },
+    "before_freeze": {
+      "present": true,
+      "summary": {
+        "affected_reader_ids": [
+          "R1001",
+          "R1002",
+          "R1003",
+          "R1004"
+        ],
+        "available_count": 2,
+        "borrowed_count": 0,
+        "total_count": 4,
+        "waiting_count": 2
+      },
+      "time": "2026-06-19T03:33:59.212639+00:00"
+    }
+  },
+  "status": "frozen",
+  "timeline": [
+    {
+      "detail": "创建冻结单，原因=inventory_check，生效方式=立即生效，影响读者 4 人",
+      "event": "created",
+      "operator": "librarian_A",
+      "timestamp": "2026-06-19T03:33:59.213037+00:00"
+    },
+    {
+      "detail": "冻结立即生效，共冻结 4 条预约",
+      "event": "frozen",
+      "operator": "librarian_A",
+      "timestamp": "2026-06-19T03:33:59.216374+00:00"
+    }
+  ],
+  "updated_at": "2026-06-19T03:33:59.217855+00:00"
+}

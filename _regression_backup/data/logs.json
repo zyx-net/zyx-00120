@@ -1,0 +1,92 @@
+[
+  {
+    "log_id": "38aaedaf-8862-428c-870c-1bb86e67d8ec",
+    "timestamp": "2026-06-19T03:01:05.273382+00:00",
+    "action": "add_book",
+    "reader_id": null,
+    "book_id": "CFG-B001",
+    "detail": "添加书目 配置变更测试书",
+    "success": true
+  },
+  {
+    "log_id": "ccb4f691-f4df-41e9-b90a-afc200714c78",
+    "timestamp": "2026-06-19T03:01:05.278951+00:00",
+    "action": "reserve",
+    "reader_id": "CFG-R001",
+    "book_id": "CFG-B001",
+    "detail": "预约成功，状态=available",
+    "success": true
+  },
+  {
+    "log_id": "8d471ed9-934c-48e6-892a-025b4c123bd1",
+    "timestamp": "2026-06-19T03:01:05.287709+00:00",
+    "action": "add_book",
+    "reader_id": null,
+    "book_id": "CFG-NEW",
+    "detail": "添加书目 配置变更新书",
+    "success": true
+  },
+  {
+    "log_id": "43e17dfc-4331-4ba3-974c-aa77f44191d7",
+    "timestamp": "2026-06-19T03:01:08.577164+00:00",
+    "action": "add_book",
+    "reader_id": null,
+    "book_id": "RM-B005",
+    "detail": "添加书目 取消预约测试书",
+    "success": true
+  },
+  {
+    "log_id": "01c5ece6-75d9-46de-88fb-6eda6ef70623",
+    "timestamp": "2026-06-19T03:01:08.582707+00:00",
+    "action": "reserve",
+    "reader_id": "RM-R005",
+    "book_id": "RM-B005",
+    "detail": "预约成功，状态=available",
+    "success": true
+  },
+  {
+    "log_id": "204f67e4-3691-4977-aa14-e95367a46cdf",
+    "timestamp": "2026-06-19T03:01:08.587865+00:00",
+    "action": "cancel",
+    "reader_id": "RM-R005",
+    "book_id": "RM-B005",
+    "detail": "取消预约，原状态=available",
+    "success": true
+  },
+  {
+    "log_id": "f41f69bc-0036-431e-904a-2198e301aa59",
+    "timestamp": "2026-06-19T03:01:08.603331+00:00",
+    "action": "add_book",
+    "reader_id": null,
+    "book_id": "RM-B006",
+    "detail": "添加书目 并发测试书",
+    "success": true
+  },
+  {
+    "log_id": "c48adc35-45de-4637-a2d8-fb2f3863d9a5",
+    "timestamp": "2026-06-19T03:01:08.612069+00:00",
+    "action": "reserve",
+    "reader_id": "RM-R006",
+    "book_id": "RM-B006",
+    "detail": "预约成功，状态=available",
+    "success": true
+  },
+  {
+    "log_id": "3cfcff50-e2ee-4133-8fe1-0817e227a809",
+    "timestamp": "2026-06-19T03:01:08.705087+00:00",
+    "action": "add_book",
+    "reader_id": null,
+    "book_id": "RM-B007",
+    "detail": "添加书目 端到端测试书",
+    "success": true
+  },
+  {
+    "log_id": "cd9e9a75-e7f4-45b0-9b70-90fbc559db62",
+    "timestamp": "2026-06-19T03:01:08.712915+00:00",
+    "action": "reserve",
+    "reader_id": "RM-R007",
+    "book_id": "RM-B007",
+    "detail": "预约成功，状态=available",
+    "success": true
+  }
+]

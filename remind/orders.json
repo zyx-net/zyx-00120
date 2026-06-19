@@ -44,7 +44,7 @@
     "book_id": "RM-B006",
     "reader_id": "RM-R006",
     "trigger_reason": "manual",
-    "status": "pending",
+    "status": "expired",
     "operator": null,
     "remark": "",
     "config_signature": "5bf57924b2147ac41c2e2a8c17eee1942e00bc8f079f3f10223d9bcf34c1d681",
@@ -55,13 +55,27 @@
         "timestamp": "2026-06-19T03:01:08.619792+00:00",
         "operator": null,
         "detail": "创建催办单，触发原因: manual，预约状态: available"
+      },
+      {
+        "event": "recovered",
+        "timestamp": "2026-06-19T03:24:33.878985+00:00",
+        "operator": null,
+        "detail": "服务重启，催办单由状态 pending 恢复为 processed"
+      },
+      {
+        "event": "expired",
+        "timestamp": "2026-06-19T03:24:33.882207+00:00",
+        "operator": null,
+        "detail": "馆藏配置已变更，催办单自动失效"
       }
     ],
     "created_at": "2026-06-19T03:01:08.619913+00:00",
-    "updated_at": "2026-06-19T03:01:08.619921+00:00",
+    "updated_at": "2026-06-19T03:24:33.882207+00:00",
     "revoked_at": null,
-    "expired_at": null,
-    "final_status": null
+    "expired_at": "2026-06-19T03:24:33.882207+00:00",
+    "final_status": "expired",
+    "recovered_note": "服务重启，由状态 pending 恢复为 processed",
+    "expire_reason": "馆藏配置已变更，催办单失效"
   },
   {
     "order_id": "3d419e51-3e4d-4874-8858-ae01b4f2e0e5",
@@ -101,7 +115,7 @@
     "book_id": "RM-B007",
     "reader_id": "RM-R007",
     "trigger_reason": "long_waiting",
-    "status": "pending",
+    "status": "expired",
     "operator": "e2e-user2",
     "remark": "",
     "config_signature": "3c069c015a75b3b81b3ddde92a4b706ba89f57410447fc7fe021fa059699a43e",
@@ -112,12 +126,26 @@
         "timestamp": "2026-06-19T03:01:08.745365+00:00",
         "operator": "e2e-user2",
         "detail": "创建催办单，触发原因: long_waiting，预约状态: available"
+      },
+      {
+        "event": "recovered",
+        "timestamp": "2026-06-19T03:24:33.880629+00:00",
+        "operator": null,
+        "detail": "服务重启，催办单由状态 pending 恢复为 processed"
+      },
+      {
+        "event": "expired",
+        "timestamp": "2026-06-19T03:26:47.629456+00:00",
+        "operator": null,
+        "detail": "馆藏配置已变更，催办单自动失效"
       }
     ],
     "created_at": "2026-06-19T03:01:08.745380+00:00",
-    "updated_at": "2026-06-19T03:01:08.745386+00:00",
+    "updated_at": "2026-06-19T03:26:47.629456+00:00",
     "revoked_at": null,
-    "expired_at": null,
-    "final_status": null
+    "expired_at": "2026-06-19T03:26:47.629456+00:00",
+    "final_status": "expired",
+    "recovered_note": "服务重启，由状态 pending 恢复为 processed",
+    "expire_reason": "馆藏配置已变更，催办单失效"
   }
 ]
