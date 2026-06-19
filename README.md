@@ -3121,3 +3121,230 @@ _*.log
 ```
 
 最终效果：**源码根目录下只有 `*.py`、`requirements.txt`、`README.md`、`data/`、`freeze/`、`checkup/`、`remind/`、`sandbox/` 这些应该提交的文件**，回归调试产物永远不会串进交付包。
+
+
+---
+
+## 入口回归测试（v7.0 新增）
+
+为 [freeze_regression.bat](file:///d:/workSpace/AI__SPACE/zyx-00120/freeze_regression.bat) 和 [freeze_regression.py](file:///d:/workSpace/AI__SPACE/zyx-00120/freeze_regression.py) 两个入口搭建了完整的自动化回归测试，覆盖帮助文案、参数透传、退出码、边界行为等各个维度。
+
+### 测试覆盖场景
+
+| 场景 | 说明 |
+|------|------|
+| --help 帮助文案 | 校验两边帮助文案不串味、无系统错误、无分支残片 |
+| --clean-only 仅清理 | 校验退出码、输出内容、不启动服务器、不产生工件 |
+| --git-check 参数透传 | 校验 BAT 别名映射、Python 无别名、透传正确性 |
+| 非法参数处理 | 校验 Python 报错退出码 2、BAT 静默忽略的行为差异 |
+| 大小写变体 help | 校验 BAT 大小写不敏感、Python 大小写敏感 |
+| BAT 特有别名 | --keep/--export/--clean 仅在 BAT 层有效 |
+| 多参数组合透传 | 多个别名组合透传正确性、重复参数累加行为 |
+| 退出码一致性 | --help 和 --clean-only 两边退出码一致 |
+| 无额外系统报错 | 无路径错误、无权限错误、无 Traceback |
+| 包装层特有问题 | 专门断言 7 类只会出现在 BAT 层的行为 |
+
+### 运行完整回归测试
+
+`ash
+# 运行完整测试（约 1 分钟，覆盖 40+ 用例）
+python test_freeze_regression.py
+`
+
+测试完成后会输出：
+- 每个用例的 PASS/FAIL 状态
+- 失败用例的详细错误信息
+- **只会出现在 BAT 包装层的 7 类问题总结**
+
+### 快速自检脚本
+
+交付前可运行 8 项快速自检，约 10 秒完成：
+
+`ash
+# Windows 快速自检
+selfcheck_entrypoints.bat
+`
+
+### 手动复核命令（交付前必过一遍）
+
+以下三条命令依次执行，可验证**干净性 / 可导出 / 重启链路**三项核心要求：
+
+`ash
+#  默认链路验证：跑完后 git status 保持干净（忽略 _regression_artifacts/）
+freeze_regression.bat --git-check
+
+#  显式导出验证：带 --export 后 exports/ 目录有样例文件
+freeze_regression.bat --clean --export
+
+#  重启恢复链路验证：连续跑两次默认链路，第二次应同样通过且不残留前一次
+freeze_regression.bat --clean
+freeze_regression.bat
+`
+
+若 --git-check 报告 [OK] 运行后 git status 保持干净，且 exports/ 目录下存在带时间戳的 reeze_report_sample_*.json，即说明工件管理链路符合预期。
+
+### 手动排障命令
+
+`ash
+# 清理所有历史运行工件（不含 exports/）
+freeze_regression.bat --clean-only
+
+# 失败后想看完整日志：找到最近一次失败目录
+type _regression_artifacts\LATEST
+dir _regression_artifacts\runs\\logs\
+
+# 从 exports/ 目录取出显式导出的报告样例
+dir _regression_artifacts\exports\
+`
+
+### 包装层特有问题总结
+
+以下 7 类问题**只会出现在 BAT 包装层**，Python 入口不会有这些行为：
+
+| 问题 | 说明 |
+|------|------|
+| 大小写不敏感 | --HELP / --Help / -H 在 BAT 层都有效 |
+| 别名支持 | --keep / --export / --clean / --git-check 仅在 BAT 层有效 |
+| 未知参数静默忽略 | BAT 不报错，Python 退出码 2 |
+| 重复参数累加 | BAT 重复参数会重复透传给 Python |
+| 帮助文案完全独立 | BAT 用 echo 输出，Python 用 argparse 生成 |
+| 前置检查 | BAT 检查 Python 和 flask 依赖，Python 不检查 |
+| 额外输出 | BAT 有横幅、工件提示、结果汇总，Python 没有 |
+
+---
+
+### 与 .gitignore 的对应关系
+
+.gitignore 中新增三类规则，彻底避免误提交：
+
+`gitignore
+# 1) 统一工件根（整包忽略，默认永远不进仓库）
+_regression_artifacts/
+
+# 2) 旧版本遗留散落路径（兼容历史，防止被"顺手加进仓库"）
+_regression_backup/
+_review_tmp/
+_freeze_report_sample.json
+_freeze_regression.log
+_*_regression_backup/
+_*_report_sample.json
+
+# 3) 兜底：所有带下划线前缀的 .log（demoX.py 等旧脚本万一跑出来也能兜住）
+_*.log
+`
+
+最终效果：**源码根目录下只有 *.py、equirements.txt、README.md、data/、reeze/、checkup/、emind/、sandbox/ 这些应该提交的文件**，回归调试产物永远不会混进交付包。
+
+
+
+---
+
+## 入口回归测试（v7.0 新增）
+
+为 [freeze_regression.bat](file:///d:/workSpace/AI__SPACE/zyx-00120/freeze_regression.bat) 和 [freeze_regression.py](file:///d:/workSpace/AI__SPACE/zyx-00120/freeze_regression.py) 两个入口搭建了完整的自动化回归测试，覆盖帮助文案、参数透传、退出码、边界行为等各个维度。
+
+### 测试覆盖场景
+
+| 场景 | 说明 |
+|------|------|
+| `--help` 帮助文案 | 校验两边帮助文案不串味、无系统错误、无分支残片 |
+| `--clean-only` 仅清理 | 校验退出码、输出内容、不启动服务器、不产生工件 |
+| `--git-check` 参数透传 | 校验 BAT 别名映射、Python 无别名、透传正确性 |
+| 非法参数处理 | 校验 Python 报错退出码 2、BAT 静默忽略的行为差异 |
+| 大小写变体 help | 校验 BAT 大小写不敏感、Python 大小写敏感 |
+| BAT 特有别名 | `--keep`/`--export`/`--clean` 仅在 BAT 层有效 |
+| 多参数组合透传 | 多个别名组合透传正确性、重复参数累加行为 |
+| 退出码一致性 | `--help` 和 `--clean-only` 两边退出码一致 |
+| 无额外系统报错 | 无路径错误、无权限错误、无 Traceback |
+| 包装层特有问题 | 专门断言 7 类只会出现在 BAT 层的行为 |
+
+### 运行完整回归测试
+
+```bash
+# 运行完整测试（约 1 分钟，覆盖 40+ 用例）
+python test_freeze_regression.py
+```
+
+测试完成后会输出：
+- 每个用例的 PASS/FAIL 状态
+- 失败用例的详细错误信息
+- **只会出现在 BAT 包装层的 7 类问题总结**
+
+### 快速自检脚本
+
+交付前可运行 8 项快速自检，约 10 秒完成：
+
+```bash
+# Windows 快速自检
+selfcheck_entrypoints.bat
+```
+
+### 手动复核命令（交付前必过一遍）
+
+以下三条命令依次执行，可验证**干净性 / 可导出 / 重启链路**三项核心要求：
+
+```bash
+# ① 默认链路验证：跑完后 git status 保持干净（忽略 _regression_artifacts/）
+freeze_regression.bat --git-check
+
+# ② 显式导出验证：带 --export 后 exports/ 目录有样例文件
+freeze_regression.bat --clean --export
+
+# ③ 重启恢复链路验证：连续跑两次默认链路，第二次应同样通过且不残留前一次
+freeze_regression.bat --clean
+freeze_regression.bat
+```
+
+若 `--git-check` 报告 `[OK] 运行后 git status 保持干净`，且 `exports/` 目录下存在带时间戳的 `freeze_report_sample_*.json`，即说明工件管理链路符合预期。
+
+### 手动排障命令
+
+```bash
+# 清理所有历史运行工件（不含 exports/）
+freeze_regression.bat --clean-only
+
+# 失败后想看完整日志：找到最近一次失败目录
+type _regression_artifacts\LATEST
+dir _regression_artifacts\runs\<run_id>\logs\
+
+# 从 exports/ 目录取出显式导出的报告样例
+dir _regression_artifacts\exports\
+```
+
+### 包装层特有问题总结
+
+以下 7 类问题**只会出现在 BAT 包装层**，Python 入口不会有这些行为：
+
+| 问题 | 说明 |
+|------|------|
+| 大小写不敏感 | `--HELP` / `--Help` / `-H` 在 BAT 层都有效 |
+| 别名支持 | `--keep` / `--export` / `--clean` / `--git-check` 仅在 BAT 层有效 |
+| 未知参数静默忽略 | BAT 不报错，Python 退出码 2 |
+| 重复参数累加 | BAT 重复参数会重复透传给 Python |
+| 帮助文案完全独立 | BAT 用 echo 输出，Python 用 argparse 生成 |
+| 前置检查 | BAT 检查 Python 和 flask 依赖，Python 不检查 |
+| 额外输出 | BAT 有横幅、工件提示、结果汇总，Python 没有 |
+
+---
+
+### 与 .gitignore 的对应关系
+
+`.gitignore` 中新增三类规则，彻底避免误提交：
+
+```gitignore
+# 1) 统一工件根（整包忽略，默认永远不进仓库）
+_regression_artifacts/
+
+# 2) 旧版本遗留散落路径（兼容历史，防止被"顺手加进仓库"）
+_regression_backup/
+_review_tmp/
+_freeze_report_sample.json
+_freeze_regression.log
+_*_regression_backup/
+_*_report_sample.json
+
+# 3) 兜底：所有带下划线前缀的 .log（demoX.py 等旧脚本万一跑出来也能兜住）
+_*.log
+```
+
+最终效果：**源码根目录下只有 `*.py`、`requirements.txt`、`README.md`、`data/`、`freeze/`、`checkup/`、`remind/`、`sandbox/` 这些应该提交的文件**，回归调试产物永远不会混进交付包。
