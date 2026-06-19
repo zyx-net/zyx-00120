@@ -1,10 +1,10 @@
 [
   {
-    "batch_id": "75df2380-e677-468f-bf91-b35da772ddd8",
+    "batch_id": "4a35493c-9b13-42a1-a297-7c7a0296439e",
     "type": "snapshot_import",
     "status": "rolled_back",
-    "created_at": "2026-06-19T00:50:15.344808+00:00",
-    "rolled_back_at": "2026-06-19T00:50:15.363676+00:00",
+    "created_at": "2026-06-19T01:08:56.964720+00:00",
+    "rolled_back_at": "2026-06-19T01:08:56.980288+00:00",
     "summary": {
       "books": 2,
       "active_reservations": 2,
@@ -79,58 +79,7 @@
         }
       ]
     },
-    "import_log_id": "da8de9fe-c7ba-47e6-901a-c634443bf181",
-    "rollback_log_id": "630022f0-31be-4962-97e2-906c625e6f81"
-  },
-  {
-    "batch_id": "9b81852c-1e8d-4995-95cf-e28967d66cbd",
-    "type": "snapshot_import",
-    "status": "rolled_back",
-    "created_at": "2026-06-19T00:54:07.855454+00:00",
-    "rolled_back_at": "2026-06-19T00:54:07.884763+00:00",
-    "summary": {
-      "books": 1,
-      "active_reservations": 1,
-      "blacklist": 0,
-      "logs": 1
-    },
-    "imported_details": {
-      "books": [
-        {
-          "book_id": "REV-P09-1781830447",
-          "title": "Reviewer P09 Book",
-          "total_copies": 2,
-          "borrow_days": 7,
-          "retain_hours": 0
-        }
-      ],
-      "active_reservations": [
-        {
-          "reservation_id": "RES-P09-1781830447",
-          "book_id": "REV-P09-1781830447",
-          "reader_id": "R-P09-1781830447",
-          "status": "waiting",
-          "created_at": "2026-06-19T00:00:00+00:00",
-          "available_at": null,
-          "expire_at": null,
-          "borrowed_at": null,
-          "returned_at": null
-        }
-      ],
-      "blacklist": [],
-      "logs": [
-        {
-          "log_id": "LOG-P09-1781830447",
-          "timestamp": "2026-06-19T00:00:01+00:00",
-          "action": "reserve",
-          "success": true,
-          "book_id": "REV-P09-1781830447",
-          "reader_id": "R-P09-1781830447",
-          "detail": "reviewer generated log"
-        }
-      ]
-    },
-    "import_log_id": "24b952f8-39b9-4274-bce6-fc29eb1ac4e4",
-    "rollback_log_id": "e0e65894-7513-4a4d-85c9-0464bd3dc39c"
+    "import_log_id": "3ea26649-92a8-4db0-954c-64dc8e3d9534",
+    "rollback_log_id": "31fe052d-6d10-4a01-aec5-2cf22c37675d"
   }
 ]

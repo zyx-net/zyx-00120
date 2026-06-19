@@ -470,7 +470,112 @@ def main():
         r_list, _ = api("GET", "/api/batches")
         assert_equal(len(r_list["data"]), 0, "冲突导入后批次列表仍为空")
 
-        section("测试16: dry-run 导入不生成批次")
+        section("测试16: 快照内重复 ISBN 拦截，无任何数据落盘")
+        clear_data()
+        stop_server(proc)
+        proc = start_server()
+
+        books_before_hash = get_file_hash("books.json")
+        reservations_before_hash = get_file_hash("reservations.json")
+        blacklist_before_hash = get_file_hash("blacklist.json")
+        logs_before_hash = get_file_hash("logs.json")
+        batches_before_hash = get_file_hash("batches.json")
+
+        books_before_mtime = get_file_mtime("books.json")
+        reservations_before_mtime = get_file_mtime("reservations.json")
+        blacklist_before_mtime = get_file_mtime("blacklist.json")
+        logs_before_mtime = get_file_mtime("logs.json")
+        batches_before_mtime = get_file_mtime("batches.json")
+
+        duplicate_isbn_snap = {
+            "version": "2.0",
+            "type": "full_snapshot",
+            "books": [
+                {"book_id": "DUP-ISBN-001", "title": "重复书1", "total_copies": 5, "borrow_days": 30, "retain_hours": 24},
+                {"book_id": "DUP-ISBN-001", "title": "重复书2", "total_copies": 3, "borrow_days": 14, "retain_hours": 12},
+                {"book_id": "DUP-ISBN-002", "title": "合法书", "total_copies": 2, "borrow_days": 7, "retain_hours": 1},
+            ],
+            "active_reservations": [],
+            "blacklist": [],
+            "logs": [],
+        }
+
+        r_pre, _ = api("POST", "/api/snapshot/precheck", duplicate_isbn_snap)
+        assert_true(r_pre.get("ok"), "预检 ok=true")
+        pre_skip = r_pre["data"]["details"]["books"]["will_skip"]
+        assert_equal(len(pre_skip), 2, "预检检测到 2 条重复将跳过（两个相同 book_id 都被标记）")
+        assert_equal(pre_skip[0]["conflict_type"], "duplicate_book_id_in_snapshot", "冲突类型正确")
+        assert_equal(pre_skip[0]["book_id"], "DUP-ISBN-001", "重复 book_id 正确")
+        assert_equal(pre_skip[1]["conflict_type"], "duplicate_book_id_in_snapshot", "第二条冲突类型也正确")
+        assert_equal(pre_skip[1]["book_id"], "DUP-ISBN-001", "第二条重复 book_id 也正确")
+
+        r_import, status_import = api("POST", "/api/snapshot/import?dry_run=false", duplicate_isbn_snap)
+        assert_equal(status_import, 409, "快照内重复 ISBN 返回 409")
+        assert_true("batch_id" not in r_import, "重复 ISBN 不生成批次")
+        assert_true("conflicts" in r_import, "响应包含 conflicts")
+
+        dup_conflicts = [c for c in r_import["conflicts"] if c.get("type") == "duplicate_book_id_in_snapshot"]
+        assert_equal(len(dup_conflicts), 1, "包含 duplicate_book_id_in_snapshot 冲突")
+        assert_equal(dup_conflicts[0]["book_id"], "DUP-ISBN-001", "冲突 book_id 正确")
+
+        r_list, _ = api("GET", "/api/batches")
+        assert_equal(len(r_list["data"]), 0, "重复 ISBN 后批次列表仍为空")
+
+        r_books, _ = api("GET", "/api/books")
+        assert_equal(len(r_books["data"]), 0, "重复 ISBN 后书籍列表为空（无写入）")
+
+        assert_equal(get_file_hash("books.json"), books_before_hash, "冲突时 books.json 内容不变")
+        assert_equal(get_file_hash("reservations.json"), reservations_before_hash, "冲突时 reservations.json 内容不变")
+        assert_equal(get_file_hash("blacklist.json"), blacklist_before_hash, "冲突时 blacklist.json 内容不变")
+        assert_equal(get_file_hash("logs.json"), logs_before_hash, "冲突时 logs.json 内容不变")
+        assert_equal(get_file_hash("batches.json"), batches_before_hash, "冲突时 batches.json 内容不变")
+
+        assert_equal(get_file_mtime("books.json"), books_before_mtime, "冲突时 books.json 修改时间不变")
+        assert_equal(get_file_mtime("reservations.json"), reservations_before_mtime, "冲突时 reservations.json 修改时间不变")
+        assert_equal(get_file_mtime("blacklist.json"), blacklist_before_mtime, "冲突时 blacklist.json 修改时间不变")
+        assert_equal(get_file_mtime("logs.json"), logs_before_mtime, "冲突时 logs.json 修改时间不变")
+        assert_equal(get_file_mtime("batches.json"), batches_before_mtime, "冲突时 batches.json 修改时间不变")
+
+        section("测试17: 非法数值书目无任何数据落盘")
+        clear_data()
+        stop_server(proc)
+        proc = start_server()
+
+        books_before_hash = get_file_hash("books.json")
+        logs_before_hash = get_file_hash("logs.json")
+        batches_before_hash = get_file_hash("batches.json")
+
+        bad_numeric_snap = {
+            "version": "2.0",
+            "type": "full_snapshot",
+            "books": [
+                {"book_id": "GOOD-001", "title": "合法书", "total_copies": 5, "borrow_days": 30, "retain_hours": 24},
+                {"book_id": "BAD-COP-001", "title": "坏副本数", "total_copies": 0, "borrow_days": 30, "retain_hours": 24},
+                {"book_id": "BAD-BD-001", "title": "坏借期", "total_copies": 3, "borrow_days": 0, "retain_hours": 12},
+                {"book_id": "BAD-RH-001", "title": "坏保留期", "total_copies": 3, "borrow_days": 14, "retain_hours": -1},
+            ],
+            "active_reservations": [],
+            "blacklist": [],
+            "logs": [],
+        }
+
+        r_import, status_import = api("POST", "/api/snapshot/import?dry_run=false", bad_numeric_snap)
+        assert_equal(status_import, 409, "非法数值返回 409")
+        assert_true("batch_id" not in r_import, "非法数值不生成批次")
+
+        conflict_types = [c.get("type") for c in r_import["conflicts"]]
+        assert_true("invalid_copies" in conflict_types, "包含 invalid_copies")
+        assert_true("invalid_borrow_days" in conflict_types, "包含 invalid_borrow_days")
+        assert_true("invalid_retain_hours" in conflict_types, "包含 invalid_retain_hours")
+
+        r_books, _ = api("GET", "/api/books")
+        assert_equal(len(r_books["data"]), 0, "非法数值后书籍列表为空（合法书也未写入）")
+
+        assert_equal(get_file_hash("books.json"), books_before_hash, "非法数值时 books.json 内容不变")
+        assert_equal(get_file_hash("logs.json"), logs_before_hash, "非法数值时 logs.json 内容不变")
+        assert_equal(get_file_hash("batches.json"), batches_before_hash, "非法数值时 batches.json 内容不变")
+
+        section("测试18: dry-run 导入不生成批次")
         clear_data()
         stop_server(proc)
         proc = start_server()
@@ -486,7 +591,46 @@ def main():
         books_dry = api("GET", "/api/books")[0]["data"]
         assert_equal(len(books_dry), 0, "dry-run 后实际数据为空")
 
-        section("测试17: 批次数据与实际数据一致性核对")
+        section("测试19: dry-run 预检通过后正式导入成功")
+        snap_dry_to_import = create_test_snapshot("DRY-TO-IMP", "R-DRYIMP", "BL-DRYIMP")
+
+        r_dry1, s_dry1 = api("POST", "/api/snapshot/import?dry_run=true", snap_dry_to_import)
+        assert_equal(s_dry1, 200, "第一次 dry-run 返回 200")
+        assert_true(r_dry1.get("ok"), "第一次 dry-run ok=true")
+        assert_true(r_dry1.get("can_import", True) or r_dry1.get("report", {}).get("can_import"), "dry-run 报告 can_import=true")
+        assert_true("batch_id" not in r_dry1, "第一次 dry-run 不返回 batch_id")
+
+        r_list1, _ = api("GET", "/api/batches")
+        assert_equal(len(r_list1["data"]), 0, "第一次 dry-run 后批次列表为空")
+
+        r_dry2, s_dry2 = api("POST", "/api/snapshot/import?dry_run=true", snap_dry_to_import)
+        assert_equal(s_dry2, 200, "第二次 dry-run 返回 200")
+        assert_equal(r_dry2.get("report", {}).get("can_import"), r_dry1.get("report", {}).get("can_import"), "两次 dry-run report.can_import 一致")
+
+        r_imp, s_imp = api("POST", "/api/snapshot/import?dry_run=false", snap_dry_to_import)
+        assert_equal(s_imp, 200, "正式导入返回 200")
+        assert_true(r_imp.get("ok"), "正式导入 ok=true")
+        assert_true("batch_id" in r_imp, "正式导入返回 batch_id")
+        batch_dry_imp = r_imp["batch_id"]
+
+        r_list2, _ = api("GET", "/api/batches")
+        assert_equal(len(r_list2["data"]), 1, "正式导入后批次列表有 1 条记录")
+        assert_equal(r_list2["data"][0]["batch_id"], batch_dry_imp, "批次ID匹配")
+        assert_equal(r_list2["data"][0]["status"], "active", "批次状态为 active")
+
+        r_books_after, _ = api("GET", "/api/books")
+        assert_equal(len(r_books_after["data"]), 2, "正式导入后有 2 本书")
+
+        r_rb, _ = api("POST", f"/api/batches/{batch_dry_imp}/rollback")
+        assert_true(r_rb.get("ok"), "回滚成功")
+
+        r_list3, _ = api("GET", "/api/batches")
+        assert_equal(r_list3["data"][0]["status"], "rolled_back", "回滚后状态为 rolled_back")
+
+        r_books_after_rb, _ = api("GET", "/api/books")
+        assert_equal(len(r_books_after_rb["data"]), 0, "回滚后书籍数量为 0")
+
+        section("测试20: 批次数据与实际数据一致性核对")
         clear_data()
         stop_server(proc)
         proc = start_server()
@@ -520,7 +664,7 @@ def main():
         batch_bl_ids = sorted([b["reader_id"] for b in details["blacklist"]])
         assert_equal(actual_bl_ids, batch_bl_ids, "批次中的黑名单与实际黑名单一致")
 
-        section("测试18: 回滚后日志文件和 JSON 数据一致")
+        section("测试21: 回滚后日志文件和 JSON 数据一致")
         logs_before_rollback = api("GET", "/api/logs?limit=10000")[0]["data"]
         log_ids_before = {l["log_id"] for l in logs_before_rollback if l.get("log_id")}
 
@@ -556,7 +700,7 @@ def main():
         assert_true(batch_in_file is not None, "批次记录在 JSON 文件中存在")
         assert_equal(batch_in_file["status"], "rolled_back", "JSON 文件中批次状态正确")
 
-        section("测试19: 多个批次按时间倒序排列")
+        section("测试22: 多个批次按时间倒序排列")
         clear_data()
         stop_server(proc)
         proc = start_server()
@@ -581,12 +725,12 @@ def main():
         assert_equal(r_list["data"][1]["batch_id"], batch2, "第二个是中间的批次")
         assert_equal(r_list["data"][2]["batch_id"], batch1, "第三个是最早的批次")
 
-        section("测试20: 批次 limit 参数")
+        section("测试23: 批次 limit 参数")
         r_limit, _ = api("GET", "/api/batches?limit=2")
         assert_equal(len(r_limit["data"]), 2, "limit=2 时返回 2 条")
         assert_equal(r_limit["data"][0]["batch_id"], batch3, "最新的在前")
 
-        section("测试21: 非法数值书目 - total_copies<1 拦截")
+        section("测试24: 非法数值书目 - total_copies<1 拦截")
         clear_data()
         stop_server(proc)
         proc = start_server()
@@ -613,7 +757,7 @@ def main():
         r_books, _ = api("GET", "/api/books")
         assert_equal(len(r_books["data"]), 0, "非法数值后书籍列表为空")
 
-        section("测试22: 非法数值书目 - borrow_days<1 拦截")
+        section("测试25: 非法数值书目 - borrow_days<1 拦截")
         bad_snap_2 = create_test_snapshot("BAD-BD", "R-BADBD", "BL-BADBD")
         bad_snap_2["books"][0]["borrow_days"] = 0
         r_import, status_import = api("POST", "/api/snapshot/import?dry_run=false", bad_snap_2)
@@ -621,7 +765,7 @@ def main():
         conflict_types = [c.get("type") for c in r_import["conflicts"]]
         assert_true("invalid_borrow_days" in conflict_types, "conflicts 包含 invalid_borrow_days")
 
-        section("测试23: 非法数值书目 - retain_hours<0 拦截")
+        section("测试26: 非法数值书目 - retain_hours<0 拦截")
         bad_snap_3 = create_test_snapshot("BAD-RH", "R-BADRH", "BL-BADRH")
         bad_snap_3["books"][0]["retain_hours"] = -1
         r_import, status_import = api("POST", "/api/snapshot/import?dry_run=false", bad_snap_3)
@@ -629,7 +773,7 @@ def main():
         conflict_types = [c.get("type") for c in r_import["conflicts"]]
         assert_true("invalid_retain_hours" in conflict_types, "conflicts 包含 invalid_retain_hours")
 
-        section("测试24: 混合有效+无效书目 - 全部拦截，不生成批次")
+        section("测试27: 混合有效+无效书目 - 全部拦截，不生成批次")
         mixed_bad_snap = {
             "version": "2.0",
             "type": "full_snapshot",
@@ -658,7 +802,7 @@ def main():
         r_batches, _ = api("GET", "/api/batches")
         assert_equal(len(r_batches["data"]), 0, "批次列表为空")
 
-        section("测试25: dry-run 与正式导入 report 对非法数值口径一致")
+        section("测试28: dry-run 与正式导入 report 对非法数值口径一致")
         r_dry, status_dry = api("POST", "/api/snapshot/import?dry_run=true", mixed_bad_snap)
         assert_equal(status_dry, 409, "dry-run 也返回 409")
         dry_book_conflicts = [c for c in r_dry["conflicts"] if c.get("section") == "books"]
@@ -668,7 +812,7 @@ def main():
         import_types = sorted([c.get("type") for c in imp_book_conflicts])
         assert_equal(dry_types, import_types, "dry-run 与正式导入冲突类型一致")
 
-        section("测试26: 回滚后导入汇总日志也被清理")
+        section("测试29: 回滚后导入汇总日志也被清理")
         clear_data()
         stop_server(proc)
         proc = start_server()
@@ -697,7 +841,7 @@ def main():
         assert_equal(len(rollback_logs), 1, "恰好 1 条 rollback_batch 日志")
         assert_true(batch_rb_log in rollback_logs[0].get("detail", ""), "rollback 日志包含批次ID")
 
-        section("测试27: 重复回滚不产生新日志（幂等）")
+        section("测试30: 重复回滚不产生新日志（幂等）")
         r_rb2, _ = api("POST", f"/api/batches/{batch_rb_log}/rollback")
         assert_true(r_rb2.get("ok"), "第二次回滚也 ok=true")
         assert_true(r_rb2.get("already_rolled_back"), "already_rolled_back=true")
@@ -710,7 +854,7 @@ def main():
         import_snapshot_logs_2 = [l for l in logs_after_2 if l.get("action") == "import_snapshot"]
         assert_equal(len(import_snapshot_logs_2), 0, "重复回滚后 import_snapshot 日志仍为 0")
 
-        section("测试28: 服务重启后查批次并回滚，日志和数据一致")
+        section("测试31: 服务重启后查批次并回滚，日志和数据一致")
         clear_data()
         stop_server(proc)
         proc = start_server()
@@ -745,7 +889,7 @@ def main():
         import_snap_logs_r = [l for l in logs_after_r if l.get("action") == "import_snapshot"]
         assert_equal(len(import_snap_logs_r), 0, "重启后回滚 import_snapshot 日志被清理")
 
-        section("测试29: 配置切换后导入不同数值的书目")
+        section("测试32: 配置切换后导入不同数值的书目")
         clear_data()
         stop_server(proc)
         proc = start_server()
@@ -781,7 +925,7 @@ def main():
         assert_equal(len(books_after_cfg), 1, "回滚批次A后剩 1 本书")
         assert_equal(books_after_cfg[0]["book_id"], "CFG-B-001", "剩的是 CFG-B-001")
 
-        section("测试30: 三方口径一致 - 预检/dry-run/正式导入的 report 和 conflicts")
+        section("测试33: 三方口径一致 - 预检/dry-run/正式导入的 report 和 conflicts")
         clear_data()
         stop_server(proc)
         proc = start_server()
@@ -824,7 +968,7 @@ def main():
         books_tri = api("GET", "/api/books")[0]["data"]
         assert_equal(len(books_tri), 0, "正式导入后书籍列表为空（无写入）")
 
-        section("测试31: 批次导出快照与导入数据一致")
+        section("测试34: 批次导出快照与导入数据一致")
         clear_data()
         stop_server(proc)
         proc = start_server()

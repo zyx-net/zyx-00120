@@ -1628,9 +1628,6 @@ def import_snapshot(snapshot_data, dry_run=False):
         return None, None, format_err_messages, report
 
     if conflicts:
-        if not dry_run:
-            _log("import_snapshot", False,
-                 detail=f"快照导入发现 {len(conflicts)} 个冲突，已中止")
         return None, conflicts, None, report
 
     books_data = parsed["books"]
