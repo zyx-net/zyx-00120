@@ -31,3 +31,26 @@ temp/
 Thumbs.db
 .idea/
 .vscode/
+
+# ============================================================
+# 回归测试工件（统一入口，默认全部忽略）
+# ============================================================
+# 工件根目录：所有调试产物（备份、日志、报告、诊断）均在此
+_regression_artifacts/
+
+# 兼容旧版本遗留散落路径（避免被误提交）
+_regression_backup/
+_review_tmp/
+_free_regression.log
+_free_regression_backup/
+_free_freeze_report_sample.json
+_free_freeze_regression.log
+_freeze_report_sample.json
+_freeze_regression.log
+_*_regression_backup/
+_*_report_sample.json
+_*_regression.log
+
+# 所有 demo 脚本散落的日志/报告/备份（若存在旧路径）
+demo_*.log
+_*.log

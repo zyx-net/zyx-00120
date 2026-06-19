@@ -2,7 +2,9 @@ import os
 import sys
 import json
 import time
+import uuid
 import shutil
+import argparse
 import subprocess
 import signal
 import urllib.request
@@ -12,11 +14,266 @@ BASE_URL = "http://127.0.0.1:5000"
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(PROJECT_DIR, "data")
 FREEZE_DIR = os.path.join(PROJECT_DIR, "freeze")
-BACKUP_DIR = os.path.join(PROJECT_DIR, "_regression_backup")
+
+ARTIFACTS_ROOT = os.path.join(PROJECT_DIR, "_regression_artifacts")
+RUNS_DIR = os.path.join(ARTIFACTS_ROOT, "runs")
+EXPORTS_DIR = os.path.join(ARTIFACTS_ROOT, "exports")
+LATEST_PTR = os.path.join(ARTIFACTS_ROOT, "LATEST")
 
 _PASS = 0
 _FAIL = 0
 _LOG_LINES = []
+
+
+class ArtifactManager:
+    def __init__(self, keep_artifacts=False, export_samples=False,
+                 export_dir=None, clean_before=False,
+                 check_git_clean=False):
+        self.keep_artifacts = keep_artifacts
+        self.export_samples = export_samples
+        self.export_dir = export_dir or PROJECT_DIR
+        self.check_git_clean = check_git_clean
+
+        self.run_id = time.strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
+        self.run_dir = os.path.join(RUNS_DIR, self.run_id)
+        self.backup_dir = os.path.join(self.run_dir, "backup")
+        self.logs_dir = os.path.join(self.run_dir, "logs")
+        self.reports_dir = os.path.join(self.run_dir, "reports")
+        self.diagnostics_dir = os.path.join(self.run_dir, "diagnostics")
+
+        self.meta_path = os.path.join(self.run_dir, "RUN_META.json")
+        self.log_file = os.path.join(self.logs_dir, "regression.log")
+        self.pid_file = os.path.join(self.diagnostics_dir, "server_pid.txt")
+
+        self.status = "created"
+        self.started_at = None
+        self.finished_at = None
+        self.git_clean_before = None
+        self.git_clean_after = None
+        self._samples_to_export = {}
+
+        if clean_before:
+            self.clean_all_runs()
+
+        if self.check_git_clean:
+            self.git_clean_before = self._check_git_clean()
+
+    def _ensure_dirs(self):
+        for d in [ARTIFACTS_ROOT, RUNS_DIR, EXPORTS_DIR,
+                  self.run_dir, self.backup_dir, self.logs_dir,
+                  self.reports_dir, self.diagnostics_dir]:
+            os.makedirs(d, exist_ok=True)
+
+    def _write_meta(self, **extra):
+        meta = {
+            "run_id": self.run_id,
+            "status": self.status,
+            "started_at": self.started_at,
+            "finished_at": self.finished_at,
+            "exit_code": None,
+            "pass_count": None,
+            "fail_count": None,
+            "git_clean_before": self.git_clean_before,
+            "git_clean_after": self.git_clean_after,
+            "artifacts_kept": False,
+            "samples_exported": False,
+            "dirs": {
+                "backup": os.path.relpath(self.backup_dir, PROJECT_DIR),
+                "logs": os.path.relpath(self.logs_dir, PROJECT_DIR),
+                "reports": os.path.relpath(self.reports_dir, PROJECT_DIR),
+                "diagnostics": os.path.relpath(self.diagnostics_dir, PROJECT_DIR),
+            }
+        }
+        meta.update(extra)
+        try:
+            with open(self.meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _run_git(args):
+        try:
+            result = subprocess.run(
+                ["git"] + args,
+                cwd=PROJECT_DIR,
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            return result.returncode == 0, result.stdout.strip(), result.stderr.strip()
+        except FileNotFoundError:
+            return None, "", "git 命令不可用"
+        except Exception as e:
+            return None, "", str(e)
+
+    @staticmethod
+    def _check_git_clean():
+        ok, out, err = ArtifactManager._run_git(["status", "--porcelain"])
+        if ok is None:
+            return None
+        clean_lines = []
+        for line in out.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            parts = stripped.split(None, 1)
+            path = parts[1] if len(parts) > 1 else parts[0]
+            rel = os.path.relpath(os.path.join(PROJECT_DIR, path), PROJECT_DIR)
+            if rel.startswith("_regression_artifacts") or rel == "_regression_artifacts":
+                continue
+            clean_lines.append(stripped)
+        return len(clean_lines) == 0, clean_lines
+
+    def mark_started(self):
+        self._ensure_dirs()
+        self.started_at = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+        self.status = "running"
+        self._write_meta()
+        self._update_latest_ptr()
+
+    def mark_finished(self, exit_code, pass_count, fail_count):
+        self.finished_at = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+        if exit_code == 0:
+            self.status = "completed"
+        else:
+            self.status = "failed"
+        self._write_meta(
+            exit_code=exit_code,
+            pass_count=pass_count,
+            fail_count=fail_count,
+        )
+
+    def _update_latest_ptr(self):
+        try:
+            with open(LATEST_PTR, "w", encoding="utf-8") as f:
+                f.write(self.run_id + "\n")
+        except Exception:
+            pass
+
+    def backup_data(self, data_dirs):
+        for d in data_dirs:
+            if os.path.exists(d):
+                name = os.path.basename(d)
+                dst = os.path.join(self.backup_dir, name)
+                if os.path.exists(dst):
+                    shutil.rmtree(dst, ignore_errors=True)
+                shutil.copytree(d, dst)
+        log(f"已备份数据到 {os.path.relpath(self.backup_dir, PROJECT_DIR)}")
+
+    def restore_data(self, data_dir_names):
+        for name in data_dir_names:
+            src = os.path.join(self.backup_dir, name)
+            dst = os.path.join(PROJECT_DIR, name)
+            if os.path.exists(dst):
+                shutil.rmtree(dst, ignore_errors=True)
+            if os.path.exists(src):
+                shutil.copytree(src, dst)
+        log("已恢复原始数据")
+
+    def save_report_sample(self, name, data):
+        path = os.path.join(self.reports_dir, name)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        self._samples_to_export[name] = path
+        log(f"  报告样例已保存: {os.path.relpath(path, PROJECT_DIR)}")
+
+    def write_log_file(self):
+        with open(self.log_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(_LOG_LINES))
+        log(f"测试日志已保存: {os.path.relpath(self.log_file, PROJECT_DIR)}")
+
+    def write_pid_file(self, pid):
+        try:
+            with open(self.pid_file, "w", encoding="utf-8") as f:
+                f.write(str(pid) + "\n")
+        except Exception:
+            pass
+
+    def do_export_samples(self):
+        if not self.export_samples or not self._samples_to_export:
+            return False
+        os.makedirs(self.export_dir, exist_ok=True)
+        for name, src_path in self._samples_to_export.items():
+            base, ext = os.path.splitext(name)
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            dst_name = f"{base}_{self.run_id}_{timestamp}{ext}"
+            dst_path = os.path.join(self.export_dir, dst_name)
+            shutil.copy2(src_path, dst_path)
+            log(f"  已导出样例: {os.path.relpath(dst_path, PROJECT_DIR)}")
+        export_meta = os.path.join(self.export_dir, f"EXPORT_{self.run_id}.json")
+        with open(export_meta, "w", encoding="utf-8") as f:
+            json.dump({
+                "source_run": self.run_id,
+                "exported_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                "samples": list(self._samples_to_export.keys()),
+            }, f, ensure_ascii=False, indent=2)
+        return True
+
+    @staticmethod
+    def clean_all_runs():
+        removed = 0
+        if os.path.isdir(RUNS_DIR):
+            for entry in os.listdir(RUNS_DIR):
+                full = os.path.join(RUNS_DIR, entry)
+                if os.path.isdir(full):
+                    shutil.rmtree(full, ignore_errors=True)
+                    removed += 1
+        if os.path.exists(LATEST_PTR):
+            try:
+                os.remove(LATEST_PTR)
+            except Exception:
+                pass
+        if removed:
+            print(f"[CLEAN] 已清理 {removed} 个历史运行目录")
+
+    def finalize(self, exit_code, pass_count, fail_count):
+        self.mark_finished(exit_code, pass_count, fail_count)
+        self.write_log_file()
+
+        exported = False
+        if self.export_samples and exit_code == 0:
+            exported = self.do_export_samples()
+
+        kept = False
+        if self.keep_artifacts:
+            kept = True
+        elif self.status == "failed":
+            kept = True
+            log(f"运行失败，工件已保留用于诊断: {os.path.relpath(self.run_dir, PROJECT_DIR)}")
+
+        if not kept and os.path.isdir(self.run_dir):
+            shutil.rmtree(self.run_dir, ignore_errors=True)
+            if os.path.exists(LATEST_PTR):
+                try:
+                    with open(LATEST_PTR, "r", encoding="utf-8") as f:
+                        latest = f.read().strip()
+                    if latest == self.run_id:
+                        os.remove(LATEST_PTR)
+                except Exception:
+                    pass
+
+        if self.check_git_clean:
+            result = self._check_git_clean()
+            if result is not None:
+                clean, dirty = result
+                self.git_clean_after = (clean, dirty)
+                if not clean:
+                    log(f"[WARN] 运行后 git status 不干净: {dirty}", "WARN")
+                else:
+                    log("[OK] 运行后 git status 保持干净")
+
+        self._write_meta(
+            exit_code=exit_code,
+            pass_count=pass_count,
+            fail_count=fail_count,
+            artifacts_kept=kept,
+            samples_exported=exported,
+        )
+        return kept
+
+
+_ART_MGR = None
 
 
 def log(msg, level="INFO"):
@@ -85,25 +342,11 @@ def wait_for_server(max_wait=30):
 
 
 def backup_data():
-    if os.path.exists(BACKUP_DIR):
-        shutil.rmtree(BACKUP_DIR, ignore_errors=True)
-    os.makedirs(BACKUP_DIR, exist_ok=True)
-    for d in [DATA_DIR, FREEZE_DIR]:
-        if os.path.exists(d):
-            name = os.path.basename(d)
-            shutil.copytree(d, os.path.join(BACKUP_DIR, name))
-    log(f"已备份数据到 {BACKUP_DIR}")
+    _ART_MGR.backup_data([DATA_DIR, FREEZE_DIR])
 
 
 def restore_data():
-    for d in ["data", "freeze"]:
-        src = os.path.join(BACKUP_DIR, d)
-        dst = os.path.join(PROJECT_DIR, d)
-        if os.path.exists(dst):
-            shutil.rmtree(dst, ignore_errors=True)
-        if os.path.exists(src):
-            shutil.copytree(src, dst)
-    log("已恢复原始数据")
+    _ART_MGR.restore_data(["data", "freeze"])
 
 
 def start_server():
@@ -118,6 +361,7 @@ def start_server():
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
     )
     log(f"启动服务器 PID={proc.pid}")
+    _ART_MGR.write_pid_file(proc.pid)
     return proc
 
 
@@ -256,10 +500,7 @@ def run_tests():
         assert_true(rep["snapshots"]["after_freeze"]["present"], "after_freeze 快照标记存在")
         audit_count = len(rep["audit_logs"])
         assert_true(audit_count >= 3, f"报告包含审计日志 >=3（实际 {audit_count}）")
-        report_path = os.path.join(PROJECT_DIR, "_freeze_report_sample.json")
-        with open(report_path, "w", encoding="utf-8") as f:
-            json.dump(rep, f, ensure_ascii=False, indent=2)
-        log(f"  报告样例已保存: {report_path}")
+        _ART_MGR.save_report_sample("freeze_report_sample.json", rep)
 
         log("")
         log("=== [T7] 按书目和原因筛选冻结单 ===")
@@ -524,11 +765,80 @@ def run_post_restart_tests(ids):
     return _FAIL == 0
 
 
+def build_arg_parser():
+    parser = argparse.ArgumentParser(
+        description="预约冻结与恢复中心 - 一键回归测试",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+工件目录结构（默认全部 git-ignore）:
+  _regression_artifacts/
+  ├── runs/YYYYMMDD_HHMMSS_<rand>/   每次运行的独立目录
+  │   ├── backup/                    测试前数据备份
+  │   ├── logs/regression.log        完整执行日志
+  │   ├── reports/                   报告样例
+  │   ├── diagnostics/               PID 等诊断文件
+  │   └── RUN_META.json              运行元数据
+  ├── exports/                       --export-samples 显式导出的样例
+  └── LATEST                         最近一次运行 ID 指针
+
+默认策略：
+  * 成功运行 → 自动清理工件目录，源码根保持干净
+  * 失败运行 → 自动保留工件（backup/logs/reports/diagnostics）
+  * --keep-artifacts → 无论成功失败都保留
+  * --export-samples → 成功后把报告样例复制到 exports/ 或指定目录
+  * --check-git-clean → 执行前后检查 git status 干净性
+        """,
+    )
+    parser.add_argument("--keep-artifacts", action="store_true",
+                        help="无论成功失败都保留运行工件目录")
+    parser.add_argument("--export-samples", action="store_true",
+                        help="运行成功后导出报告样例")
+    parser.add_argument("--export-dir", metavar="PATH", default=None,
+                        help="导出目录（默认 _regression_artifacts/exports/）")
+    parser.add_argument("--clean-before", action="store_true",
+                        help="运行前清理所有历史运行工件目录")
+    parser.add_argument("--clean-only", action="store_true",
+                        help="仅清理历史工件并退出，不执行回归")
+    parser.add_argument("--check-git-clean", action="store_true",
+                        help="执行前后检查 git status（忽略 _regression_artifacts/）")
+    return parser
+
+
 def main():
+    global _ART_MGR
+    parser = build_arg_parser()
+    args = parser.parse_args()
+
+    if args.clean_only:
+        ArtifactManager.clean_all_runs()
+        print("[DONE] 清理完成，未执行回归测试")
+        return 0
+
+    export_dir = args.export_dir
+    if export_dir is None and args.export_samples:
+        export_dir = EXPORTS_DIR
+
+    _ART_MGR = ArtifactManager(
+        keep_artifacts=args.keep_artifacts,
+        export_samples=args.export_samples,
+        export_dir=export_dir,
+        clean_before=args.clean_before,
+        check_git_clean=args.check_git_clean,
+    )
+    _ART_MGR.mark_started()
+
     log("开始执行预约冻结与恢复中心回归测试")
     log(f"项目目录: {PROJECT_DIR}")
+    log(f"工件运行目录: {os.path.relpath(_ART_MGR.run_dir, PROJECT_DIR)}")
+    if _ART_MGR.check_git_clean and _ART_MGR.git_clean_before is not None:
+        clean, dirty = _ART_MGR.git_clean_before
+        if clean:
+            log("[OK] 运行前 git status 干净")
+        else:
+            log(f"[WARN] 运行前 git status 不干净: {dirty}", "WARN")
 
     proc = None
+    exit_code = 1
     try:
         proc = start_server()
         if not wait_for_server():
@@ -553,14 +863,14 @@ def main():
             return 1
 
         ok = run_post_restart_tests(ids)
-        return 0 if ok else 1
+        exit_code = 0 if ok else 1
+        return exit_code
     finally:
         stop_server(proc)
         restore_data()
-        log_file = os.path.join(PROJECT_DIR, "_freeze_regression.log")
-        with open(log_file, "w", encoding="utf-8") as f:
-            f.write("\n".join(_LOG_LINES))
-        log(f"测试日志已保存: {log_file}")
+        _ART_MGR.finalize(exit_code, _PASS, _FAIL)
+        rel_latest = os.path.relpath(os.path.join(RUNS_DIR, _ART_MGR.run_id), PROJECT_DIR)
+        log(f"工件元数据: RUN_META.json @ {rel_latest}/ (若保留)")
 
 
 if __name__ == "__main__":

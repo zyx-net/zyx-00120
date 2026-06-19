@@ -2656,3 +2656,468 @@ python demo10.py
 23. 缺少 snapshot 字段返回 400
 24. retain_hours=0 的敏感配置告警
 25. 完整链路 - 创建→查询→导出→作废→重新提交
+
+---
+
+## 预约冻结与恢复中心接口详解（v7.0 新增）
+
+当某册书目需要下架盘点、书架维护或异常排查时，可以创建**冻结单**将当前预约队列整体封存，期间不改变读者的排队权益。排查完成后一键恢复，队列和可借状态原样回到冻结前。
+
+### 核心特性
+
+1. **权限区分**：`viewer` 只读查询，`manager` 才能创建/恢复/撤销，操作带 `operator` 留痕
+2. **立即冻结 + 定时冻结**：立即生效或指定 `effective_at` 在未来某时刻自动生效
+3. **前后快照完整保留**：冻结瞬间的队列 `before` 快照和封冻后的 `after_freeze` 快照分别落盘，重启后仍可读取
+4. **恢复原子性**：整次冻结的所有预约一次性回到原状态原位置，绝不"恢复一半"
+5. **批量恢复**：多本冻结单一次性恢复，成功/失败分别列示，已恢复过的不会重复操作
+6. **审计留痕**：创建、生效、撤销、恢复、导出报告每条操作带时间戳和 `operator`
+7. **功能开关**：管理员可临时关闭冻结功能，关闭时 pending 单自动失效，新冻结被拦截
+8. **幂等创建**：通过 `idempotency_key` 防止前端重复提交，重复命中返回首次结果
+9. **持久化**：冻结单、队列快照、审计日志均写入 `freeze/` 独立目录，服务重启后完整恢复
+10. **数据隔离**：冻结模块的所有文件在 `freeze/` 目录下，与 `data/`、`checkup/`、`remind/`、`sandbox/` 完全分离
+
+### 冻结单状态机
+
+```
+          创建（未到 effective_at）              manager 撤销
+pending ──────────────────────────────────────► revoked
+  │
+  │ 到点自动生效 / 立即冻结（effective_at 为空）
+  ▼
+frozen ──────────────────────────────────────► restored
+          管理员恢复（单人 / 批量）
+
+pending ──── 功能关闭（config.enabled=false） ────► auto_invalidated
+```
+
+---
+
+### POST `/api/freeze` - 创建冻结单
+
+**功能说明**：对指定书目创建冻结单，支持立即冻结或定时生效，带 `idempotency_key` 幂等保护。
+
+**请求头**：
+- `X-Role`：`manager` 才能创建，`viewer` 返回 403
+- `X-Operator`：可选，作为 `operator` 字段写入审计，与请求体中 `operator` 等价
+
+**请求体**：
+
+```json
+{
+  "book_id": "B001",
+  "reason": "inventory_check",
+  "remark": "年终盘点，馆内下架盘点",
+  "effective_at": "2026-06-20T02:00:00+00:00",
+  "idempotency_key": "idem-annual-2026",
+  "operator": "librarian_A"
+}
+```
+
+**字段说明**：
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `book_id` | ✅ | 要冻结的书目 |
+| `reason` | ✅ | 冻结原因：`inventory_check` / `maintenance` / `abnormal_check` / `other` |
+| `remark` | ❌ | 人性化备注 |
+| `effective_at` | ❌ | ISO 时间；为空表示立即冻结，否则创建为 `pending` |
+| `idempotency_key` | ❌ | 幂等键，重复提交返回首次结果（HTTP 201 + `idempotent_hit=true`） |
+| `operator` | ✅ | 操作者标识，留痕审计 |
+
+**成功响应**（HTTP 201，立即冻结）：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "freeze_id": "FRZ-uuid",
+    "book_id": "B001",
+    "status": "frozen",
+    "reason": "inventory_check",
+    "operator": "librarian_A",
+    "created_at": "...",
+    "effective_at": null,
+    "before_snapshot_summary": {"total_count": 4, "status_breakdown": {"waiting": 3, "available": 1}},
+    "after_snapshot_summary": {"frozen_count": 4}
+  },
+  "idempotent_hit": false
+}
+```
+
+**错误响应**：
+- HTTP 403：`X-Role=viewer` 无权限
+- HTTP 409：该书目已存在 `pending` 或 `frozen` 的活跃冻结单
+- HTTP 400：冻结功能被系统管理员关闭
+
+---
+
+### GET `/api/freeze` - 列出冻结单（支持筛选）
+
+**Query 参数**（均可组合）：
+- `book_id`：按书目筛选
+- `reason`：按原因筛选
+- `status`：按状态筛选（`pending` / `frozen` / `restored` / `revoked` / `auto_invalidated`）
+- `operator`：按操作者筛选
+- `limit`：返回数量上限，默认 100
+
+**请求示例**：
+```bash
+curl "http://127.0.0.1:5000/api/freeze?book_id=B001&reason=inventory_check"
+```
+
+**响应**：HTTP 200，按创建时间倒序返回冻结单列表。
+
+---
+
+### GET `/api/freeze/<freeze_id>` - 查询单个冻结单
+
+只读查询，包含完整状态流转时间戳、快照摘要、operator 等所有字段。
+
+---
+
+### GET `/api/freeze/<freeze_id>/snapshot/before` - 查看冻结前队列快照
+
+**请求头**：`X-Role` 可为 `viewer`（只读权限即可）
+
+**响应示例**（HTTP 200）：
+```json
+{
+  "ok": true,
+  "data": {
+    "freeze_id": "FRZ-uuid",
+    "book_id": "B001",
+    "snapshot_type": "before_freeze",
+    "total_count": 4,
+    "affected_readers": [
+      {"reader_id": "R1001", "position": 1, "status": "available", "expire_at": "..."},
+      {"reader_id": "R1002", "position": 2, "status": "waiting", "created_at": "..."}
+    ]
+  }
+}
+```
+
+---
+
+### GET `/api/freeze/<freeze_id>/snapshot/after_freeze` - 查看封冻后快照
+
+封冻瞬间每条预约被标记为 `frozen` 的状态。结构与 `before` 快照一致，用于核对冻结前后的差异。
+
+---
+
+### GET `/api/freeze/<freeze_id>/export` - 导出 JSON 冻结报告
+
+**请求头**：`X-Role` 可为 `viewer`（只读即可）
+
+导出报告包含：冻结元数据、影响读者摘要、时间线（created → effective → restored 等）、前后快照存在性标记、完整审计日志，可直接归档或邮件转发。
+
+**触发审计**：每次导出产生 `action=freeze_export_report` 的审计记录。
+
+---
+
+### POST `/api/freeze/<freeze_id>/revoke` - 撤销未生效冻结单
+
+仅 `status=pending` 的冻结单可撤销；已生效的冻结应走 `restore` 恢复。
+
+**请求体**：
+```json
+{"operator": "librarian_C"}
+```
+
+**成功响应**（HTTP 200）：`status=revoked` 并带 `revoked_at` 时间戳。
+
+**错误响应**（HTTP 409）：状态不是 pending，返回消息明确说明"仅 pending 状态可撤销"。
+
+---
+
+### POST `/api/freeze/<freeze_id>/restore` - 恢复已生效冻结单
+
+将冻结前封存的整支队列一次性还原到原状态和原位置，返回恢复摘要。
+
+**请求体**：
+```json
+{"operator": "librarian_A"}
+```
+
+**成功响应**（HTTP 200）：
+```json
+{
+  "ok": true,
+  "data": {
+    "freeze_id": "FRZ-uuid",
+    "status": "restored",
+    "restored_at": "...",
+    "restore_summary": {
+      "total_restored": 4,
+      "by_status": {"waiting": 3, "available": 1}
+    }
+  }
+}
+```
+
+**幂等性**：已 `restored` 的冻结单重复 `restore` 返回已有结果，不改变状态或新增日志。
+
+---
+
+### POST `/api/freeze/batch-restore` - 批量恢复多个冻结单
+
+**请求体**：
+```json
+{
+  "freeze_ids": ["FRZ-uuid-1", "FRZ-uuid-2", "FRZ-already-restored"],
+  "operator": "librarian_batch"
+}
+```
+
+**成功响应**（HTTP 200）：
+```json
+{
+  "ok": true,
+  "total": 3,
+  "succeeded": [
+    {"freeze_id": "FRZ-uuid-1", "restored_count": 4},
+    {"freeze_id": "FRZ-uuid-2", "restored_count": 1}
+  ],
+  "failed": [
+    {"freeze_id": "FRZ-already-restored", "error": "冻结单状态不是 frozen，无法恢复"}
+  ]
+}
+```
+
+**特性**：
+- 逐份尝试，单份失败不影响其他
+- 成功的恢复均产生独立审计记录
+- 整批请求聚合为一条 `action=freeze_batch_restore` 的汇总审计
+
+---
+
+### GET `/api/freeze/audit-logs` - 查询冻结审计日志
+
+**Query 参数**：
+- `freeze_id`：按冻结单筛选
+- `operator`：按操作者筛选
+- `action`：按动作筛选（`freeze_create` / `freeze_effective` / `freeze_revoke` / `freeze_restore` / `freeze_export_report` / `freeze_batch_restore` / `freeze_config_change`）
+- `limit`：默认 100
+
+---
+
+### GET `/api/freeze/config` / PUT `/api/freeze/config` - 功能开关
+
+**读取**（`X-Role` 可为 viewer）：
+```json
+{"ok": true, "data": {"enabled": true}}
+```
+
+**修改**（`X-Role` 必须为 manager）：
+```json
+{"enabled": false, "operator": "admin"}
+```
+
+**关闭副作用**：
+- 功能关闭期间创建冻结单返回 HTTP 400
+- 关闭瞬间所有 `pending` 冻结单自动变为 `auto_invalidated`，响应列出 `auto_invalidated_ids`
+- 已 `frozen` 的冻结单不受影响（管理员后续需手动 `restore`）
+- 操作产生 `action=freeze_config_change` 审计记录
+
+---
+
+### 冻结模块使用指南
+
+#### 标准流程：盘点 → 冻结 → 恢复
+
+```bash
+# 1. 创建立即冻结单
+curl -X POST http://127.0.0.1:5000/api/freeze \
+  -H "Content-Type: application/json" \
+  -H "X-Role: manager" \
+  -d '{"book_id":"B001","reason":"inventory_check","idempotency_key":"inv-2026-06","operator":"lib_A"}'
+
+# 2. 查看冻结前后队列快照，核对无误后开始盘点
+curl http://127.0.0.1:5000/api/freeze/FRZ-uuid/snapshot/before
+curl http://127.0.0.1:5000/api/freeze/FRZ-uuid/snapshot/after_freeze
+
+# 3. 盘点完成后恢复队列
+curl -X POST http://127.0.0.1:5000/api/freeze/FRZ-uuid/restore \
+  -H "Content-Type: application/json" \
+  -H "X-Role: manager" \
+  -d '{"operator":"lib_A"}'
+
+# 4. 导出归档报告
+curl http://127.0.0.1:5000/api/freeze/FRZ-uuid/export > freeze-report.json
+```
+
+#### 目录结构
+
+```
+freeze/
+├── orders.json       # 冻结单主表（freeze_id、状态、前后快照引用、operator 等）
+├── snapshots.json    # 前后队列快照（before/after_freeze，独立存储不混日志）
+└── logs.json         # 冻结操作审计日志（不混入 data/logs.json）
+```
+
+**关键保证**：
+- `data/` 正式目录完全不感知冻结：预约文件仅在冻结/恢复瞬间被原子改写，前后 SHA256 可验证
+- 服务重启后冻结状态完整恢复，快照文件可继续查询
+- 关闭功能自动失效 pending 单，重启后失效状态保持不变
+
+---
+
+### 一键运行冻结模块回归测试
+
+Windows 一键（默认策略：成功自动清理工件，失败保留诊断）：
+
+```bash
+freeze_regression.bat
+```
+
+Python 直接调用：
+
+```bash
+python freeze_regression.py
+```
+
+该脚本覆盖 20 个核心测试场景（含重启链路）：
+1. 权限区分：viewer 不能创建冻结单
+2. 创建立即生效冻结单 + 幂等键命中
+3. 同一书目重复冻结冲突
+4. 查看冻结前后队列快照
+5. 导出 JSON 报告（结构 + 审计日志完整）
+6. 按书目和原因筛选冻结单
+7. 创建并撤销定时（pending）冻结单
+8. 已生效冻结不能撤销（仅 restore）
+9. 单人恢复：恢复冻结 + 摘要统计
+10. 验证恢复后队列状态回到原值
+11. 批量恢复：成功/失败分开列示
+12. 留痕审计：4 类操作日志都能查到
+13. 功能配置：viewer 可读 / manager 可写
+14. 配置关闭自动失效所有 pending 单
+15. 功能关闭时无法创建新冻结
+16. 重启恢复：pending/frozen 状态和快照不丢失
+17. 重启后执行恢复和导出报告，历史数据完整
+18. 「创建 → 重启 → 恢复」端到端完整链路
+
+---
+
+## 统一回归工件生命周期管理（v7.0 同步落地）
+
+### 背景与目标
+
+v7.0 之前，冻结模块的回归脚本会把 `_regression_backup/`、`_freeze_report_sample.json`、`_freeze_regression.log` 等**直接丢在项目根目录**，导致：
+- 跑完后 `git status` 不干净，复核/打包/提交容易带偏
+- 脚本中途异常退出会留下半截备份或损坏文件
+- 没有统一的命名规则，多次运行的产物无法追溯
+
+v7.0 将所有调试产物收归**统一入口**，并明确默认保留策略与显式导出开关。
+
+---
+
+### 工件目录结构
+
+```
+_regression_artifacts/         ★ 唯一入口，已在 .gitignore 中整包忽略
+├── LATEST                     最近一次运行 ID（文本指针，仅调试用）
+├── runs/
+│   └── 20260619_095419_ab12cd/    ★ 每次运行独立目录（时间戳+短随机）
+│       ├── RUN_META.json          运行元数据：状态、开始/结束、通过/失败数、git 干净性检查
+│       ├── backup/                测试前 data/ + freeze/ 的完整备份
+│       ├── logs/
+│       │   └── regression.log     完整执行日志（含 PASS/FAIL 明细）
+│       ├── reports/               报告样例（如 freeze_report_sample.json）
+│       └── diagnostics/
+│           └── server_pid.txt     启动的 Flask 服务器 PID（排查僵尸进程用）
+└── exports/                  ★ --export-samples 显式导出的样例（不落库，仅归档）
+    ├── freeze_report_sample_20260619_ab12cd_20260619_095500.json
+    └── EXPORT_20260619_095419_ab12cd.json
+```
+
+---
+
+### 默认保留策略（清理责任明确）
+
+| 场景 | `backup/` | `logs/` | `reports/` | `diagnostics/` | `RUN_META.json` | 触发方式 |
+|------|-----------|---------|------------|----------------|-----------------|----------|
+| **成功运行**（默认） | ❌ 删除 | ❌ 删除 | ❌ 删除 | ❌ 删除 | ❌ 删除 | 不传任何特殊参数 |
+| **失败运行**（默认） | ✅ 保留 | ✅ 保留 | ✅ 保留 | ✅ 保留 | ✅ 保留 | 脚本异常或断言失败自动生效 |
+| **显式保留工件** | ✅ 保留 | ✅ 保留 | ✅ 保留 | ✅ 保留 | ✅ 保留 | `--keep-artifacts`（批处理：`--keep`） |
+| **显式导出报告样例** | — | — | ✅ 复制到 `exports/` | — | — | `--export-samples`（批处理：`--export`） |
+
+> **中途失败不留下半截状态**：
+> 所有工件写入均在独立的 `runs/<run_id>/` 目录下完成，`finally` 块中根据最终状态决定整体保留或整目录删除。绝不出现"备份文件留在根目录但日志没写完"的碎片化状态。
+
+---
+
+### 命令行选项速查
+
+| Python 参数 | 批处理别名 | 说明 |
+|-------------|-----------|------|
+| `--keep-artifacts` | `--keep` | 无论成功失败都保留本次运行的完整工件目录 |
+| `--export-samples` | `--export` | 运行成功后把 `reports/` 中的样例复制到 `exports/`，文件名带 run_id 和时间戳避免覆盖 |
+| `--export-dir PATH` | — | 自定义导出目录（默认 `_regression_artifacts/exports/`） |
+| `--clean-before` | `--clean` | 运行前先清理 `runs/` 下的所有历史目录（保留 `exports/`） |
+| `--clean-only` | `--clean-only` | 仅清理历史工件并退出，**不执行回归测试** |
+| `--check-git-clean` | `--git-check` | 运行前后各执行一次 `git status --porcelain`，**忽略 `_regression_artifacts/` 本身**，发现源码根残留则打印 WARN |
+
+查看完整帮助：
+
+```bash
+freeze_regression.bat --help
+python freeze_regression.py --help
+```
+
+---
+
+### 回归自检清单（交付前必须过一遍）
+
+以下三条命令依次执行，可验证「干净性 / 可导出 / 重启链路」三项核心要求：
+
+```bash
+# ① 默认链路验证：跑完后 git status 保持干净（忽略 _regression_artifacts/）
+freeze_regression.bat --git-check
+
+# ② 显式导出验证：带 --export 后 exports/ 目录有样例文件
+freeze_regression.bat --clean --export
+
+# ③ 重启恢复链路验证：连续跑两次默认链路，第二次应同样通过且不残留前一次
+freeze_regression.bat --clean
+freeze_regression.bat
+```
+
+若 `--git-check` 报告 `[OK] 运行后 git status 保持干净`，且 `exports/` 目录下存在带时间戳的 `freeze_report_sample_*.json`，即说明工件管理链路符合预期。
+
+---
+
+### 手动急救 / 排障命令
+
+```bash
+# 清理所有历史运行工件（不含 exports/）
+freeze_regression.bat --clean-only
+
+# 失败后想看完整日志：找到最近一次失败目录
+type _regression_artifacts\LATEST
+dir _regression_artifacts\runs\$(cat _regression_artifacts\LATEST)\logs\
+
+# 从 exports/ 目录取出显式导出的报告样例
+dir _regression_artifacts\exports\
+```
+
+---
+
+### 与 .gitignore 的对齐关系
+
+`.gitignore` 中新增三类规则，彻底避免误提交：
+
+```gitignore
+# 1) 统一工件根（整包忽略，默认永远不进仓库）
+_regression_artifacts/
+
+# 2) 旧版本遗留散落路径（兼容历史，防止被"顺手加进仓库"）
+_regression_backup/
+_review_tmp/
+_freeze_report_sample.json
+_freeze_regression.log
+_*_regression_backup/
+_*_report_sample.json
+
+# 3) 兜底：所有带下划线前缀的 .log （demoX.py 等老脚本万一跑出也能兜住）
+_*.log
+```
+
+最终效果：**源码根目录下只有 `*.py`、`requirements.txt`、`README.md`、`data/`、`freeze/`、`checkup/`、`remind/`、`sandbox/` 这些应该提交的文件**，回归调试产物永远不会串进交付包。
