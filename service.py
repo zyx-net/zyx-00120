@@ -1127,9 +1127,9 @@ def _analyze_snapshot_conflicts(snapshot_data):
     }, conflicts, None, format_errors, log_issues)
 
 
-def _build_snapshot_report(parsed, conflicts, errors, format_errors, log_issues):
+def _build_snapshot_report(parsed, conflicts, errors, format_errors, log_issues, dry_run=True):
     result = {
-        "dry_run": True,
+        "dry_run": dry_run,
         "can_import": False,
         "summary": {},
         "details": {
@@ -1173,11 +1173,11 @@ def _build_snapshot_report(parsed, conflicts, errors, format_errors, log_issues)
     }
 
     for sec in ["books", "active_reservations", "blacklist", "logs"]:
-        result["details"][sec]["format_errors"] = format_errors.get(sec, [])
+        result["details"][sec]["format_errors"] = (format_errors or {}).get(sec, [])
     result["details"]["logs"]["issues"] = log_issues if log_issues else []
 
     if errors and parsed is None:
-        total_fe = sum(len(v) for v in format_errors.values()) + (len(log_issues) if log_issues else 0)
+        total_fe = sum(len(v) for v in (format_errors or {}).values()) + (len(log_issues) if log_issues else 0)
         result["summary"] = {
             "status": "format_error",
             "total_format_errors": total_fe,
@@ -1414,6 +1414,26 @@ def _build_snapshot_report(parsed, conflicts, errors, format_errors, log_issues)
         message = "校验通过（有非阻断告警），可导入，但建议关注日志问题"
 
     result["can_import"] = can_import
+    
+    bad_book_indices = {fe["index"] for fe in format_errors.get("books", [])}
+    valid_book_ids = set()
+    for idx, book in enumerate(books_data):
+        if isinstance(book, dict) and idx not in bad_book_indices and isinstance(book.get("total_copies"), int):
+            valid_book_ids.add(book["book_id"])
+    
+    valid_reservations = [
+        r for r in reservations_data
+        if isinstance(r, dict)
+        and r.get("book_id") in valid_book_ids
+        and r.get("status") in ("waiting", "available", "borrowed")
+    ]
+    valid_books = [
+        b for b in books_data
+        if isinstance(b, dict)
+        and b.get("book_id") in valid_book_ids
+        and isinstance(b.get("total_copies"), int)
+    ]
+    
     result["summary"] = {
         "status": status,
         "message": message,
@@ -1462,8 +1482,8 @@ def _build_snapshot_report(parsed, conflicts, errors, format_errors, log_issues)
                 "issues": len(result["details"]["logs"].get("issues", [])),
             },
         },
-        "queue_order_check": _check_queue_order(reservations_data, book_ids_in_snapshot),
-        "availability_check": _check_availability(books_data, reservations_data),
+        "queue_order_check": _check_queue_order(valid_reservations, valid_book_ids),
+        "availability_check": _check_availability(valid_books, valid_reservations),
     }
 
     return result
@@ -1472,6 +1492,8 @@ def _build_snapshot_report(parsed, conflicts, errors, format_errors, log_issues)
 def precheck_snapshot(snapshot_data):
     try:
         parsed, conflicts, errors, format_errors, log_issues = _analyze_snapshot_conflicts(snapshot_data)
+        report = _build_snapshot_report(parsed, conflicts, errors, format_errors, log_issues)
+        return report, None
     except Exception as e:
         error_result = {
             "dry_run": True,
@@ -1501,9 +1523,6 @@ def precheck_snapshot(snapshot_data):
             },
         }
         return error_result, None
-
-    report = _build_snapshot_report(parsed, conflicts, errors, format_errors, log_issues)
-    return report, None
 
 
 def _check_queue_order(reservations_data, book_ids_in_snapshot):
@@ -1550,29 +1569,24 @@ def import_snapshot(snapshot_data, dry_run=False):
     except Exception as e:
         return None, None, [f"快照数据解析异常: {str(e)}"], None
 
-    report = _build_snapshot_report(parsed, conflicts, errors, format_errors, log_issues)
+    report = _build_snapshot_report(parsed, conflicts, errors, format_errors, log_issues, dry_run=dry_run)
 
     total_format_errors = sum(len(v) for v in format_errors.values()) if format_errors else 0
 
     if errors and parsed is None:
-        if dry_run:
-            return None, None, errors, report
-        return None, None, errors, None
+        return None, None, errors, report
 
     if total_format_errors > 0:
         format_err_messages = []
         for sec, fe_list in format_errors.items():
             for fe in fe_list:
                 format_err_messages.append(f"[{sec}] {fe.get('message', str(fe))}")
-        if dry_run:
-            return None, None, format_err_messages, report
-        return None, None, format_err_messages, None
+        return None, None, format_err_messages, report
 
     if conflicts:
         if not dry_run:
             _log("import_snapshot", False,
                  detail=f"快照导入发现 {len(conflicts)} 个冲突，已中止")
-            return None, conflicts, None, None
         return None, conflicts, None, report
 
     books_data = parsed["books"]
@@ -1643,8 +1657,8 @@ def import_snapshot(snapshot_data, dry_run=False):
             return None, [{
                 "type": "snapshot_import_error",
                 "message": f"导入过程出错，已完整回滚所有数据: {str(e)}",
-            }], None, None
+            }], None, report
 
     _log("import_snapshot", True,
          detail=f"快照导入成功：{counts}")
-    return counts, None, None, None
+    return counts, None, None, report

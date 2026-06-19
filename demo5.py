@@ -259,17 +259,7 @@ if __name__ == "__main__":
         assert_true(len(get_active_reservations()) == 0, "DRY-RUN 后活跃预约仍为空")
 
         logs_after_dry = get_all_logs(limit=100)
-        dry_run_logs = [l for l in logs_after_dry if l["action"] == "import_snapshot_dry_run"]
-        assert_true(len(dry_run_logs) == 1, "DRY-RUN 写入 1 条 import_snapshot_dry_run 汇总日志")
-        for drl in dry_run_logs:
-            assert_true("book_id" not in drl or drl.get("book_id") is None,
-                        "DRY-RUN 汇总日志不带 book_id（不会被按书目过滤命中）")
-            assert_true("reader_id" not in drl or drl.get("reader_id") is None,
-                        "DRY-RUN 汇总日志不带 reader_id（不会被按读者过滤命中）")
-
-        snapshot_logs_in_dry = [l for l in logs_after_dry if l["action"].startswith("snapshot_import_")]
-        assert_true(len(snapshot_logs_in_dry) == 0,
-                    f"DRY-RUN 不写任何 snapshot_import_* 日志（实际 {len(snapshot_logs_in_dry)} 条）")
+        assert_true(len(logs_after_dry) == 0, "DRY-RUN 不落库：不写入任何日志，logs.json 保持不变")
 
         logs_b001_after_dry = get_logs_by_book("SNAP-B001")
         assert_true(len(logs_b001_after_dry) == 0,

@@ -619,12 +619,7 @@ if __name__ == "__main__":
 
         logs_after = get_all_logs(limit=100)
         precheck_logs = [l for l in logs_after if l["action"] == "precheck_snapshot"]
-        assert_true(len(precheck_logs) >= 1, "写入了 precheck_snapshot 汇总日志")
-        for pl in precheck_logs:
-            assert_true("book_id" not in pl or pl.get("book_id") is None,
-                        "预检汇总日志不带 book_id")
-            assert_true("reader_id" not in pl or pl.get("reader_id") is None,
-                        "预检汇总日志不带 reader_id")
+        assert_true(len(precheck_logs) == 0, "预检不落库：不写入 precheck_snapshot 汇总日志")
 
         print("  [INFO] 预检不落库验证通过")
 

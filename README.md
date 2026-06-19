@@ -79,6 +79,20 @@ python demo6.py
 python demo7.py
 ```
 
+快照正式导入完整回归测试（覆盖：
+- 正式导入成功（200）/ 冲突（409）/ 格式错误（400）三条路径均返回完整 report
+- 三方口径一致：预检 / dry-run / 正式导入 report 结构和统计完全相同
+- 空目标环境首次导入：report 内容与实际落库一致
+- 混合有效无效日志：report 明细完整，dry-run 不落库
+- 服务重启后重复提交：冲突判断一致，回滚完整
+- 切换配置后重跑：新增可导入，原有不被影响
+- 日志文件核对：import_snapshot 日志无串味
+- 关键状态核对：队列顺序、可借状态、黑名单均正确）：
+
+```bash
+python demo8.py
+```
+
 ## 数据文件位置
 
 所有持久化数据以 UTF-8 JSON 格式存储在项目目录下的 `data/` 文件夹，服务重启后完整恢复。
@@ -663,9 +677,32 @@ curl -X POST http://127.0.0.1:5000/api/snapshot/import?dry_run=false \
     "blacklist": 2,
     "logs": 25
   },
-  "dry_run": false
+  "dry_run": false,
+  "report": {
+    "dry_run": false,
+    "can_import": true,
+    "summary": {
+      "status": "ready",
+      "message": "预检通过，可以安全导入",
+      "total_will_add": 34,
+      "total_will_skip": 0,
+      "total_will_block": 0,
+      "total_conflicts": 0,
+      "total_missing_dependencies": 0,
+      "total_format_errors": 0,
+      "breakdown": { ... }
+    },
+    "details": {
+      "books": { "will_add": [...], "will_skip": [], "will_block": [], "conflicts": [], "missing_dependencies": [], "format_errors": [], "issues": [] },
+      "active_reservations": { "will_add": [...], ... },
+      "blacklist": { "will_add": [...], ... },
+      "logs": { "will_add": [...], ... }
+    }
+  }
 }
 ```
+
+> **注意**：正式导入成功响应中也包含 `report` 字段，结构与预检报告完全一致，且 `report.dry_run = false`，可用于调用方核对导入结果与预期是否一致。
 
 #### 冲突响应 - duplicate_book_id（HTTP 409）
 
@@ -1073,8 +1110,8 @@ python demo6.py
    - **导出-导入链路一致**：可用于核对队列顺序、可借状态、日志过滤结果
 
 5. **完全不落库**
-   - 预检仅做校验分析，不写入任何业务数据
-   - 仅写入一条 `precheck_snapshot` 汇总日志（不带 book_id/reader_id，不会被过滤命中）
+   - 预检仅做校验分析，不写入任何数据
+   - `data/` 目录下所有 JSON 文件保持不变（包括 logs.json）
 
 6. **测试覆盖** (`demo6.py`)
    - 13 个测试场景，覆盖空快照、混合冲突、重复预约、黑名单原因不一致、格式错误、dry-run 不写入、正式导入回滚、队列顺序核对、可借状态核对、日志过滤核对、服务重启一致性
@@ -1219,3 +1256,73 @@ python demo6.py
 3. **配置切换后重跑**：新增书目可正常导入，原有数据不被影响
 4. **混合有效/无效日志 + 预约/黑名单冲突**：三方口径一致，错误明细完整
 5. **各种日志异常场景**：字符串混入/缺字段/类型错/时间乱序/引用不存在/重复 log_id
+
+---
+
+## 本次新增要点（对应 v2.3）
+
+**正式导入 report 全路径统一 - 成功/冲突/格式错误三条路径全部返回同口径 report**
+
+### 1. 正式导入所有路径都返回完整 report
+
+同一份快照，在以下 5 条路径中，都返回同一口径的 report：
+- **预检** (`POST /api/snapshot/precheck`)：不落库，HTTP 200 + report
+- **Dry-Run** (`POST /api/snapshot/import?dry_run=true`)：不落库，200/409/400 + report
+- **正式导入成功** (`POST /api/snapshot/import?dry_run=false`)：落库，HTTP 200 + report
+- **正式导入冲突**：回滚，HTTP 409 + report
+- **正式导入格式错误**：回滚，HTTP 400 + report
+
+所有 report 结构完全一致：包含 `summary`（摘要）和 `details`（明细），四块（books/active_reservations/blacklist/logs）六类（will_add/will_skip/will_block/conflicts/missing_dependencies/format_errors）。
+
+### 2. report 中的 dry_run 字段能正确区分场景
+
+- 预检：`report.dry_run = true`
+- Dry-Run：`report.dry_run = true`
+- 正式导入（成功/冲突/格式错误）：`report.dry_run = false`
+
+调用方可以通过 `report.dry_run` 字段直接判断是模拟还是真实操作。
+
+### 3. 三方口径一致性保证
+
+预检、dry-run、正式导入 100% 共用 `_analyze_snapshot_conflicts` 校验逻辑：
+- 冲突数一致：同一份快照，三者检测到的冲突数量和类型完全相同
+- 统计口径一致：`will_add` / `will_skip` / `will_block` / `conflicts` / `format_errors` 计数完全一致
+- 明细内容一致：每块的每条记录明细完全一致
+
+### 4. 预检与 dry-run 绝对不落库
+
+- **预检**：仅做校验分析，不写入任何数据
+- **Dry-Run**：仅做校验分析，不写入任何数据
+- **文件完整性**：预检和 dry-run 后，`data/` 目录下所有 JSON 文件（books.json / reservations.json / blacklist.json / logs.json）完全不变，包括文件大小、修改时间、内容
+
+### 5. 正式导入落库完整
+
+正式导入成功后，四块数据全部落到统一快照中：
+- **books**：新增书目配置写入 `data/books.json`
+- **active_reservations**：新增活跃预约写入 `data/reservations.json`，队列顺序与源环境一致
+- **blacklist**：新增黑名单写入 `data/blacklist.json`
+- **logs**：新增相关日志写入 `data/logs.json`，与源环境日志过滤结果一致
+
+### 6. 关键链路全部补齐
+
+1. **空目标环境首次导入**：report 内容与实际落库完全一致
+2. **混合有效和无效日志**：report 明细完整，dry-run 不落库
+3. **服务重启后重复提交**：冲突判断一致，回滚完整
+4. **切换配置后重跑**：新增可导入，原有数据不被影响
+5. **日志文件核对**：import_snapshot 日志无串味（不带 book_id/reader_id）
+6. **关键状态核对**：队列顺序、可借状态、黑名单均正确
+
+### 7. 测试覆盖
+
+新增 `demo8.py` 回归测试脚本，覆盖 9 个核心场景：
+1. 正式导入成功（200）返回完整 report
+2. 正式导入冲突（409）返回完整 report
+3. 正式导入格式错误（400）返回完整 report
+4. 三方口径一致（预检 / dry-run / 正式导入）
+5. 空目标环境首次导入
+6. 混合有效和无效日志
+7. 服务重启后重复提交
+8. 切换配置后重跑
+9. 日志文件和关键状态变化核对
+
+一键运行：`python demo8.py`

@@ -1,46 +1,68 @@
-﻿[
-    {
-        "available_at":  "2026-06-19T07:00:00+00:00",
-        "book_id":  "FINAL-B001",
-        "borrowed_at":  null,
-        "created_at":  "2026-06-19T07:00:00+00:00",
-        "expire_at":  "2026-06-20T07:00:00+00:00",
-        "reader_id":  "R-FIN-001",
-        "reservation_id":  "f-res-1",
-        "returned_at":  null,
-        "status":  "available"
-    },
-    {
-        "available_at":  null,
-        "book_id":  "FINAL-B001",
-        "borrowed_at":  null,
-        "created_at":  "2026-06-19T08:00:00+00:00",
-        "expire_at":  null,
-        "reader_id":  "R-FIN-002",
-        "reservation_id":  "f-res-2",
-        "returned_at":  null,
-        "status":  "waiting"
-    },
-    {
-        "available_at":  null,
-        "book_id":  "FINAL-B001",
-        "borrowed_at":  null,
-        "created_at":  "2026-06-19T09:00:00+00:00",
-        "expire_at":  null,
-        "reader_id":  "R-FIN-003",
-        "reservation_id":  "f-res-3",
-        "returned_at":  null,
-        "status":  "waiting"
-    },
-    {
-        "available_at":  "2026-06-18T10:00:00+00:00",
-        "book_id":  "FINAL-B002",
-        "borrowed_at":  "2026-06-18T11:00:00+00:00",
-        "created_at":  "2026-06-18T10:00:00+00:00",
-        "expire_at":  null,
-        "reader_id":  "R-FIN-004",
-        "reservation_id":  "f-res-4",
-        "returned_at":  null,
-        "status":  "borrowed"
-    }
+[
+  {
+    "reservation_id": "test-res-1",
+    "book_id": "TEST-B001",
+    "reader_id": "R-TEST-001",
+    "status": "available",
+    "created_at": "2026-06-19T07:00:00+00:00",
+    "available_at": "2026-06-19T07:00:00+00:00",
+    "expire_at": "2026-06-20T07:00:00+00:00",
+    "borrowed_at": null,
+    "returned_at": null
+  },
+  {
+    "reservation_id": "test-res-2",
+    "book_id": "TEST-B001",
+    "reader_id": "R-TEST-002",
+    "status": "waiting",
+    "created_at": "2026-06-19T08:00:00+00:00",
+    "available_at": null,
+    "expire_at": null,
+    "borrowed_at": null,
+    "returned_at": null
+  },
+  {
+    "reservation_id": "test-res-3",
+    "book_id": "TEST-B002",
+    "reader_id": "R-TEST-004",
+    "status": "borrowed",
+    "created_at": "2026-06-18T10:00:00+00:00",
+    "available_at": "2026-06-18T10:00:00+00:00",
+    "expire_at": null,
+    "borrowed_at": "2026-06-18T11:00:00+00:00",
+    "returned_at": null
+  },
+  {
+    "reservation_id": "new-res-1",
+    "book_id": "NEW-B001",
+    "reader_id": "R-NEW-001",
+    "status": "waiting",
+    "created_at": "2026-06-20T08:00:00+00:00",
+    "available_at": null,
+    "expire_at": null,
+    "borrowed_at": null,
+    "returned_at": null
+  },
+  {
+    "reservation_id": "rvw-res-1",
+    "book_id": "RVW-B001",
+    "reader_id": "RVW-R001",
+    "status": "available",
+    "created_at": "2026-06-19T00:00:00+00:00",
+    "available_at": "2026-06-19T00:00:00+00:00",
+    "expire_at": "2026-06-20T00:00:00+00:00",
+    "borrowed_at": null,
+    "returned_at": null
+  },
+  {
+    "reservation_id": "rvw-res-2",
+    "book_id": "RVW-B001",
+    "reader_id": "RVW-R002",
+    "status": "waiting",
+    "created_at": "2026-06-19T00:05:00+00:00",
+    "available_at": null,
+    "expire_at": null,
+    "borrowed_at": null,
+    "returned_at": null
+  }
 ]
